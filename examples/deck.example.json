@@ -1,0 +1,17 @@
+{
+  "nas_ssh": "nas",
+  "nas_library_dir": "/srv/models-nas/library",
+  "local_dir": "~/models/deck",
+  "listen": "127.0.0.1",
+  "port": 8099,
+  "fleet": [
+    {"name": "node-1", "self": true, "note": "this box"},
+    {"name": "node-2", "ssh": "user@node-2.local", "note": "peer"}
+  ],
+  "fit": {"gpu_budget_gib": 95.69, "rank_overhead_gib": 5.6, "kv_floor_gib": 8.0, "weight_factor": 1.15, "max_nodes": 4},
+  "protected": ["qwen3:14b"],
+  "ollama_max_loaded": 3,
+  "num_ctx": 8192,
+  "big_lanes": [],
+  "vllm": {"image": "vllm/vllm-openai:latest", "port": 8010, "gpu_memory_utilization": 0.85, "max_model_len": 32768, "trust_remote_code": false}
+}

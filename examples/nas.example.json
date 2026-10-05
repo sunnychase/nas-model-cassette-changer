@@ -1,0 +1,17 @@
+{
+  "data_root": "/srv/models-nas",
+  "library_dir": "library",
+  "staging": [
+    {"path": "Models", "layout": "category/org/model"},
+    {"path": "Downloads", "layout": "org/model", "category": "LLMs"}
+  ],
+  "families": [
+    ["^Qwen3-Coder-30B-A3B", "Qwen", "Qwen3-Coder-30B-A3B-Instruct"],
+    ["^gemma-3-27b", "Google", "Gemma-3-27B-it"]
+  ],
+  "org_maker": {"my-org": "MyLab"},
+  "node": {"name": "GPU node (128 GB)", "usable_gb": 95, "max_nodes": 4},
+  "client_mount": "/mnt/nas",
+  "tiers": true,
+  "about": true
+}

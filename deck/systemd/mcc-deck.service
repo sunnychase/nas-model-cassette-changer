@@ -1,0 +1,11 @@
+[Unit]
+Description=NAS Model Cassette Changer: the deck (web UI + insert/eject)
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/.local/share/mcc/mcc_deck.py serve --config %h/.config/mcc/deck.json
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

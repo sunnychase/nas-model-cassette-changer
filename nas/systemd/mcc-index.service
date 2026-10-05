@@ -1,0 +1,9 @@
+[Unit]
+Description=NAS Model Cassette Changer: rebuild the model library index and views
+
+[Service]
+Type=oneshot
+# User=<the user that owns your model folders>
+ExecStart=/usr/bin/python3 /usr/local/bin/mcc_index.py --config /etc/mcc/nas.json
+Nice=10
+IOSchedulingClass=idle

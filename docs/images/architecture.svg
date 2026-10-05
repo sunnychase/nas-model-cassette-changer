@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1060" viewBox="0 0 1800 1060" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif"><defs>
+<radialGradient id="bg" cx="50%" cy="0%" r="120%"><stop offset="0" stop-color="#10203c"/><stop offset=".6" stop-color="#060b18"/><stop offset="1" stop-color="#03060e"/></radialGradient>
+<linearGradient id="card" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#111a2e"/><stop offset="1" stop-color="#0a1120"/></linearGradient>
+<pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#1e293b" stroke-opacity=".35"/></pattern>
+<marker id="a22d3ee" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#22d3ee"/></marker>
+<marker id="a38b6ff" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#38b6ff"/></marker>
+<marker id="af472b6" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#f472b6"/></marker>
+<marker id="af59e0b" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#f59e0b"/></marker>
+<marker id="a22c55e" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#22c55e"/></marker>
+<marker id="a94a3b8" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#94a3b8"/></marker>
+<marker id="aef4444" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#ef4444"/></marker>
+</defs><rect width="1800" height="1060" fill="url(#bg)"/><rect width="1800" height="1060" fill="url(#grid)"/>
+<text x="60" y="74" font-size="34" fill="#f8fafc" text-anchor="start" font-weight="800">NAS MODEL CASSETTE CHANGER — HOW IT FITS TOGETHER</text>
+<text x="62" y="108" font-size="18" fill="#93c5fd" text-anchor="start" font-weight="400">One big, slow, cheap library. One fast GPU box with a small local disk. Models move like cassettes: copy in, play, eject.</text>
+<rect x="60" y="150" width="470" height="560" rx="16" fill="url(#card)" stroke="#22d3ee" stroke-opacity=".8" stroke-width="1.8"/>
+<rect x="60" y="150" width="470" height="6" rx="3" fill="#22d3ee"/>
+<text x="82" y="192" font-size="24" fill="#f8fafc" text-anchor="start" font-weight="800">NAS · the library</text>
+<text x="82" y="218" font-size="14" fill="#22d3ee" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">any Linux box with disks · may sleep</text>
+<rect x="82" y="236" width="426" height="64" rx="10" fill="#0b1220" stroke="#22d3ee" stroke-opacity=".5"/>
+<text x="98" y="262" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="700">Staging folders</text>
+<text x="98" y="284" font-size="13" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">Models/&lt;category&gt;/&lt;org&gt;/&lt;model&gt;/</text>
+<rect x="82" y="312" width="426" height="64" rx="10" fill="#0b1220" stroke="#22d3ee" stroke-opacity=".5"/>
+<text x="98" y="338" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="700">mcc_index.py  (systemd timer, 10 min)</text>
+<text x="98" y="360" font-size="13" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">classify · size · format · quant · status</text>
+<rect x="82" y="388" width="426" height="64" rx="10" fill="#0b1220" stroke="#22d3ee" stroke-opacity=".5"/>
+<text x="98" y="414" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="700">library/&lt;Maker&gt;/&lt;Model&gt;/&lt;Variant&gt;</text>
+<text x="98" y="436" font-size="13" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">relative symlinks — nothing is moved</text>
+<rect x="82" y="464" width="426" height="64" rx="10" fill="#0b1220" stroke="#22d3ee" stroke-opacity=".5"/>
+<text x="98" y="490" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="700">library/_index/library.json</text>
+<text x="98" y="512" font-size="13" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">the machine index the deck reads</text>
+<rect x="82" y="540" width="426" height="64" rx="10" fill="#0b1220" stroke="#22d3ee" stroke-opacity=".5"/>
+<text x="98" y="566" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="700">library/_tiers/  ·  library/_kits/</text>
+<text x="98" y="588" font-size="13" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">grouped by nodes needed · serving recipes</text>
+<rect x="82" y="616" width="426" height="64" rx="10" fill="#0b1220" stroke="#22d3ee" stroke-opacity=".5"/>
+<text x="98" y="642" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="700">ABOUT-MODEL.md + manifest.json</text>
+<text x="98" y="664" font-size="13" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">per model: what it is, fit, how to run</text>
+<rect x="690" y="150" width="540" height="560" rx="16" fill="url(#card)" stroke="#38b6ff" stroke-opacity=".8" stroke-width="1.8"/>
+<rect x="690" y="150" width="540" height="6" rx="3" fill="#38b6ff"/>
+<text x="712" y="192" font-size="24" fill="#f8fafc" text-anchor="start" font-weight="800">GPU box · the deck</text>
+<text x="712" y="218" font-size="14" fill="#38b6ff" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">fast local NVMe · Ollama · Docker</text>
+<rect x="712" y="236" width="496" height="64" rx="10" fill="#0b1220" stroke="#38b6ff" stroke-opacity=".5"/>
+<text x="728" y="262" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="700">mcc-sync.timer  →  mcc_deck.py sync</text>
+<text x="728" y="284" font-size="13" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">ssh, read-only · never wakes the NAS</text>
+<rect x="712" y="312" width="496" height="64" rx="10" fill="#0b1220" stroke="#38b6ff" stroke-opacity=".5"/>
+<text x="728" y="338" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="700">mcc_deck.py serve   (127.0.0.1:8099)</text>
+<text x="728" y="360" font-size="13" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">shelf · tiers · insert · eject · log</text>
+<rect x="712" y="388" width="496" height="64" rx="10" fill="#0b1220" stroke="#f59e0b" stroke-opacity=".5"/>
+<text x="728" y="414" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="700">The guard</text>
+<text x="728" y="436" font-size="13" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">names every model an insert would stop → 409</text>
+<rect x="712" y="464" width="240" height="64" rx="10" fill="#0b1220" stroke="#38b6ff" stroke-opacity=".5"/>
+<text x="728" y="490" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="700">Ollama</text>
+<text x="728" y="512" font-size="13" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">GGUF cassettes</text>
+<rect x="968" y="464" width="240" height="64" rx="10" fill="#0b1220" stroke="#38b6ff" stroke-opacity=".5"/>
+<text x="984" y="490" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="700">vLLM container</text>
+<text x="984" y="512" font-size="13" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">safetensors</text>
+<rect x="712" y="540" width="496" height="64" rx="10" fill="#0b1220" stroke="#38b6ff" stroke-opacity=".5"/>
+<text x="728" y="566" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="700">~/models/deck/&lt;Maker&gt;/&lt;Model&gt;/&lt;Variant&gt;</text>
+<text x="728" y="588" font-size="13" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">local copies (the EJECTOR deletes them)</text>
+<rect x="712" y="616" width="496" height="64" rx="10" fill="#0b1220" stroke="#94a3b8" stroke-opacity=".5"/>
+<text x="728" y="642" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="700">More nodes (optional)</text>
+<text x="728" y="664" font-size="13" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">listed in the fleet; tiers show what needs 2–4</text>
+<rect x="1380" y="150" width="360" height="560" rx="16" fill="url(#card)" stroke="#f472b6" stroke-opacity=".8" stroke-width="1.8"/>
+<rect x="1380" y="150" width="360" height="6" rx="3" fill="#f472b6"/>
+<text x="1402" y="192" font-size="24" fill="#f8fafc" text-anchor="start" font-weight="800">You</text>
+<text x="1402" y="218" font-size="14" fill="#f472b6" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">phone · laptop · anywhere</text>
+<rect x="1402" y="236" width="316" height="64" rx="10" fill="#0b1220" stroke="#f472b6" stroke-opacity=".5"/>
+<text x="1418" y="262" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="700">The web page</text>
+<text x="1418" y="284" font-size="13" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">search · filter · insert · eject</text>
+<rect x="1402" y="312" width="316" height="64" rx="10" fill="#0b1220" stroke="#f472b6" stroke-opacity=".5"/>
+<text x="1418" y="338" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="700">Access token</text>
+<text x="1418" y="360" font-size="13" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">~/.config/mcc/token (0600)</text>
+<rect x="1402" y="388" width="316" height="64" rx="10" fill="#0b1220" stroke="#f472b6" stroke-opacity=".5"/>
+<text x="1418" y="414" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="700">Remote access</text>
+<text x="1418" y="436" font-size="13" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">SSH tunnel · VPN · zero-trust</text>
+<rect x="1402" y="464" width="316" height="64" rx="10" fill="#0b1220" stroke="#f472b6" stroke-opacity=".5"/>
+<text x="1418" y="490" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="700">OpenAI-style clients</text>
+<text x="1418" y="512" font-size="13" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">Ollama :11434 · vLLM :8010</text>
+<text x="1402" y="580" font-size="14" fill="#f9a8d4" text-anchor="start" font-weight="400">The deck binds to localhost by default.</text>
+<text x="1402" y="604" font-size="14" fill="#f9a8d4" text-anchor="start" font-weight="400">Put it behind something that</text>
+<text x="1402" y="628" font-size="14" fill="#f9a8d4" text-anchor="start" font-weight="400">authenticates before exposing it.</text>
+<path d="M530 496 C 610.0 496 610.0 268 688 268" fill="none" stroke="#22d3ee" stroke-width="2.6" stroke-dasharray="8 7" marker-end="url(#a22d3ee)"/>
+<rect x="562.5" y="370" width="95.0" height="26" rx="7" fill="#020617" stroke="#22d3ee" stroke-opacity=".55"/>
+<text x="610.0" y="388" font-size="13.5" fill="#22d3ee" text-anchor="middle" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">index sync</text>
+<path d="M530 572 C 610.0 572 610.0 572 688 572" fill="none" stroke="#22c55e" stroke-width="2.6" stroke-dasharray="8 7" marker-end="url(#a22c55e)"/>
+<rect x="542.75" y="592" width="134.5" height="26" rx="7" fill="#020617" stroke="#22c55e" stroke-opacity=".55"/>
+<text x="610.0" y="610" font-size="13.5" fill="#22c55e" text-anchor="middle" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">rsync on INSERT</text>
+<path d="M1380 268 C 1305.0 268 1305.0 344 1232 344" fill="none" stroke="#f472b6" stroke-width="2.6" stroke-dasharray="8 7" marker-end="url(#af472b6)"/>
+<rect x="1245.65" y="218" width="118.7" height="26" rx="7" fill="#020617" stroke="#f472b6" stroke-opacity=".55"/>
+<text x="1305.0" y="236" font-size="13.5" fill="#f472b6" text-anchor="middle" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">HTTPS + token</text>
+<path d="M1380 496 L 1232 496" fill="none" stroke="#94a3b8" stroke-width="2.6" stroke-dasharray="3 6" marker-end="url(#a94a3b8)"/>
+<rect x="1285.15" y="516" width="39.7" height="26" rx="7" fill="#020617" stroke="#94a3b8" stroke-opacity=".55"/>
+<text x="1305.0" y="534" font-size="13.5" fill="#94a3b8" text-anchor="middle" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">API</text>
+<text x="60" y="778" font-size="20" fill="#f8fafc" text-anchor="start" font-weight="800">AN INSERT, STEP BY STEP</text>
+<rect x="60" y="806" width="196" height="104" rx="14" fill="#0b1220" stroke="#38b6ff" stroke-width="1.8"/>
+<circle cx="90" cy="840" r="16" fill="#38b6ff"/>
+<text x="90" y="846" font-size="15" fill="#020617" text-anchor="middle" font-weight="800">1</text>
+<text x="116" y="847" font-size="19" fill="#f8fafc" text-anchor="start" font-weight="800">Pick</text>
+<text x="78" y="886" font-size="13.5" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">model + quant</text>
+<path d="M258 858 L272 858" fill="none" stroke="#94a3b8" stroke-width="2.6" stroke-dasharray="0" marker-end="url(#a94a3b8)"/>
+<rect x="274" y="806" width="196" height="104" rx="14" fill="#0b1220" stroke="#f59e0b" stroke-width="1.8"/>
+<circle cx="304" cy="840" r="16" fill="#f59e0b"/>
+<text x="304" y="846" font-size="15" fill="#020617" text-anchor="middle" font-weight="800">2</text>
+<text x="330" y="847" font-size="19" fill="#f8fafc" text-anchor="start" font-weight="800">Plan</text>
+<text x="292" y="886" font-size="13.5" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">what would stop?</text>
+<path d="M472 858 L486 858" fill="none" stroke="#94a3b8" stroke-width="2.6" stroke-dasharray="0" marker-end="url(#a94a3b8)"/>
+<rect x="488" y="806" width="196" height="104" rx="14" fill="#0b1220" stroke="#ef4444" stroke-width="1.8"/>
+<circle cx="518" cy="840" r="16" fill="#ef4444"/>
+<text x="518" y="846" font-size="15" fill="#020617" text-anchor="middle" font-weight="800">3</text>
+<text x="544" y="847" font-size="19" fill="#f8fafc" text-anchor="start" font-weight="800">Confirm</text>
+<text x="506" y="886" font-size="13.5" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">tick every name</text>
+<path d="M686 858 L700 858" fill="none" stroke="#94a3b8" stroke-width="2.6" stroke-dasharray="0" marker-end="url(#a94a3b8)"/>
+<rect x="702" y="806" width="196" height="104" rx="14" fill="#0b1220" stroke="#22c55e" stroke-width="1.8"/>
+<circle cx="732" cy="840" r="16" fill="#22c55e"/>
+<text x="732" y="846" font-size="15" fill="#020617" text-anchor="middle" font-weight="800">4</text>
+<text x="758" y="847" font-size="19" fill="#f8fafc" text-anchor="start" font-weight="800">Copy</text>
+<text x="720" y="886" font-size="13.5" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">rsync, resumable</text>
+<path d="M900 858 L914 858" fill="none" stroke="#94a3b8" stroke-width="2.6" stroke-dasharray="0" marker-end="url(#a94a3b8)"/>
+<rect x="916" y="806" width="196" height="104" rx="14" fill="#0b1220" stroke="#f59e0b" stroke-width="1.8"/>
+<circle cx="946" cy="840" r="16" fill="#f59e0b"/>
+<text x="946" y="846" font-size="15" fill="#020617" text-anchor="middle" font-weight="800">5</text>
+<text x="972" y="847" font-size="19" fill="#f8fafc" text-anchor="start" font-weight="800">Re-check</text>
+<text x="934" y="886" font-size="13.5" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">plan again</text>
+<path d="M1114 858 L1128 858" fill="none" stroke="#94a3b8" stroke-width="2.6" stroke-dasharray="0" marker-end="url(#a94a3b8)"/>
+<rect x="1130" y="806" width="196" height="104" rx="14" fill="#0b1220" stroke="#38b6ff" stroke-width="1.8"/>
+<circle cx="1160" cy="840" r="16" fill="#38b6ff"/>
+<text x="1160" y="846" font-size="15" fill="#020617" text-anchor="middle" font-weight="800">6</text>
+<text x="1186" y="847" font-size="19" fill="#f8fafc" text-anchor="start" font-weight="800">Play</text>
+<text x="1148" y="886" font-size="13.5" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">Ollama / vLLM</text>
+<path d="M1328 858 L1342 858" fill="none" stroke="#94a3b8" stroke-width="2.6" stroke-dasharray="0" marker-end="url(#a94a3b8)"/>
+<rect x="1344" y="806" width="196" height="104" rx="14" fill="#0b1220" stroke="#f59e0b" stroke-width="1.8"/>
+<circle cx="1374" cy="840" r="16" fill="#f59e0b"/>
+<text x="1374" y="846" font-size="15" fill="#020617" text-anchor="middle" font-weight="800">7</text>
+<text x="1400" y="847" font-size="19" fill="#f8fafc" text-anchor="start" font-weight="800">Verify</text>
+<text x="1362" y="886" font-size="13.5" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">protected still up?</text>
+<path d="M1542 858 L1556 858" fill="none" stroke="#94a3b8" stroke-width="2.6" stroke-dasharray="0" marker-end="url(#a94a3b8)"/>
+<rect x="1558" y="806" width="196" height="104" rx="14" fill="#0b1220" stroke="#94a3b8" stroke-width="1.8"/>
+<circle cx="1588" cy="840" r="16" fill="#94a3b8"/>
+<text x="1588" y="846" font-size="15" fill="#020617" text-anchor="middle" font-weight="800">8</text>
+<text x="1614" y="847" font-size="19" fill="#f8fafc" text-anchor="start" font-weight="800">Eject</text>
+<text x="1576" y="886" font-size="13.5" fill="#94a3b8" text-anchor="start" font-weight="400" font-family="JetBrains Mono, ui-monospace, monospace">keep or delete</text>
+<text x="60" y="960" font-size="15.5" fill="#cbd5e1" text-anchor="start" font-weight="400">Nothing is stopped that you did not name. A model that does not fit is refused, not squeezed in. If a protected model is</text>
+<text x="60" y="986" font-size="15.5" fill="#cbd5e1" text-anchor="start" font-weight="400">pushed out anyway, the new cassette is removed again. Ejecting never touches the NAS copy.</text>
+</svg>

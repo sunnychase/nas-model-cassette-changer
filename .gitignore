@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.venv/
+*.tmp*
+# never commit a real config or token
+deck.json
+nas.json
+token
+!examples/*.json

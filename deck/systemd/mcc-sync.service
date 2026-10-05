@@ -1,0 +1,8 @@
+[Unit]
+Description=NAS Model Cassette Changer: copy the NAS index (never wakes the NAS)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.local/share/mcc/mcc_deck.py sync --config %h/.config/mcc/deck.json
+TimeoutStartSec=90
+Nice=10
