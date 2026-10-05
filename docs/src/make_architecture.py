@@ -35,13 +35,14 @@ card(GX, 150, GW, 560, "GPU box · the deck", "fast local NVMe · Ollama · Dock
 item(GX + 22, 236, GW - 44, "mcc-sync.timer  →  mcc_deck.py sync", "ssh, read-only · never wakes the NAS", "#38b6ff")
 item(GX + 22, 312, GW - 44, "mcc_deck.py serve   (127.0.0.1:8099)", "shelf · tiers · insert · eject · log", "#38b6ff")
 item(GX + 22, 388, GW - 44, "The guard", "names every model an insert would stop → 409", "#f59e0b")
-hw = (GW - 44 - 16) // 2
-item(GX + 22, 464, hw, "Ollama", "GGUF cassettes", "#38b6ff"); item(GX + 22 + hw + 16, 464, hw, "vLLM container", "safetensors", "#38b6ff")
+tw = (GW - 44 - 32) // 3
+item(GX + 22, 464, tw, "Ollama", "GGUF", "#38b6ff"); item(GX + 22 + tw + 16, 464, tw, "vLLM · SGLang", "safetensors", "#38b6ff")
+item(GX + 22 + 2 * (tw + 16), 464, tw, "Recipe lanes", "e.g. TensorFold", "#f0abfc")
 item(GX + 22, 540, GW - 44, "~/models/deck/<Maker>/<Model>/<Variant>", "local copies (the EJECTOR deletes them)", "#38b6ff")
 item(GX + 22, 616, GW - 44, "More nodes (optional)", "listed in the fleet; tiers show what needs 2–4", "#94a3b8")
 card(YX, 150, YW, 560, "You", "phone · laptop · anywhere", "#f472b6")
 for i, (h, s_) in enumerate([("The web page", "search · filter · insert · eject"), ("Access token", "~/.config/mcc/token (0600)"),
-                             ("Remote access", "SSH tunnel · VPN · zero-trust"), ("OpenAI-style clients", "Ollama :11434 · vLLM :8010")]):
+                             ("Remote access", "SSH tunnel · VPN · zero-trust"), ("OpenAI-style clients", "Ollama · vLLM · SGLang · recipe")]):
     item(YX + 22, 236 + 76 * i, YW - 44, h, s_, "#f472b6")
 for i, line in enumerate(["The deck binds to localhost by default.", "Put it behind something that", "authenticates before exposing it."]):
     t(YX + 22, 580 + 24 * i, line, 14, "#f9a8d4")
@@ -55,7 +56,7 @@ arrow(f"M{YX} 496 L {GX+GW+2} 496", "#94a3b8", dash="3 6"); lab(g2, 534, "API", 
 
 t(60, 778, "AN INSERT, STEP BY STEP", 20, "#f8fafc", w="800")
 steps = [("Pick", "model + quant", "#38b6ff"), ("Plan", "what would stop?", "#f59e0b"), ("Confirm", "tick every name", "#ef4444"),
-         ("Copy", "rsync, resumable", "#22c55e"), ("Re-check", "plan again", "#f59e0b"), ("Play", "Ollama / vLLM", "#38b6ff"),
+         ("Copy", "rsync, resumable", "#22c55e"), ("Re-check", "plan again", "#f59e0b"), ("Play", "engine or recipe", "#38b6ff"),
          ("Verify", "protected still up?", "#f59e0b"), ("Eject", "keep or delete", "#94a3b8")]
 x0, w, gap = 60, 196, 18
 for i, (h, s, c) in enumerate(steps):
@@ -66,6 +67,7 @@ for i, (h, s, c) in enumerate(steps):
     if i < len(steps) - 1: arrow(f"M{x+w+2} 858 L{x+w+gap-2} 858", "#94a3b8", dash="0")
 t(60, 960, "Nothing is stopped that you did not name. A model that does not fit is refused, not squeezed in. If a protected model is", 15.5, "#cbd5e1")
 t(60, 986, "pushed out anyway, the new cassette is removed again. Ejecting never touches the NAS copy.", 15.5, "#cbd5e1")
+t(60, 1026, "Tip: link the NAS and the GPU box with 10 GbE (and NAS disks fast enough to fill it): a 65 GB model copies in ~1–2 min instead of ~10 on 1 GbE.", 15.5, "#86efac")
 A('</svg>')
 here = os.path.dirname(os.path.abspath(__file__))
 with open(os.path.join(here, "..", "images", "architecture.svg"), "w") as f: f.write("\n".join(o))

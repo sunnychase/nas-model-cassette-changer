@@ -377,6 +377,7 @@ def setup_text(rec, d, cf, task, cfg):
     else:
         ctx = cf.get("ctx"); mml = min(ctx, 32768) if ctx else 8192
         L += ["### 2. Serve with vLLM (OpenAI-compatible API)", "```bash", f"vllm serve {local} --served-model-name {safe.lower()} --max-model-len {mml} --port 8000", "```"]
+        L += ["or with SGLang:", "```bash", f"python3 -m sglang.launch_server --model-path {local} --served-model-name {safe.lower()} --context-length {mml} --port 30000", "```"]
         if q in ("NVFP4", "MXFP4", "FP8", "MXFP8"): L += [f"{q} needs a recent GPU generation with native {q} kernels; check your card before inserting."]
         if rec.get("nodes_est") and rec["nodes_est"] > 1:
             L += [f"Larger than one {cfg['node']['name']}: serve it tensor-parallel across {rec['nodes_est']} nodes, or pick a smaller quant."]

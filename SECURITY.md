@@ -4,6 +4,7 @@
 - INSERT and EJECT can stop running models and delete local copies. Never expose the port directly to the internet. Use an SSH tunnel, a VPN, or an authenticating reverse proxy (see the User Guide, §8).
 - The deck only talks to the NAS over ssh with BatchMode, and only reads from it (`cat` of the index, `find` for the GGUF list, and `rsync` from the NAS to the GPU box). It never writes to the NAS.
 - Deleting a local copy is limited to paths inside `local_dir`. The ids are checked, and the resolved path must stay under that folder.
-- vLLM runs with `--trust-remote-code` only if you set `vllm.trust_remote_code: true`. Leave it off unless you trust the model repo.
+- vLLM and SGLang run with `--trust-remote-code` only if you set `vllm.trust_remote_code` / `sglang.trust_remote_code` to `true`. Leave it off unless you trust the model repo.
+- Recipe lanes run the `start`/`stop` commands in your `recipes.json` as your user. Only list scripts you have read and trust.
 
 Report a vulnerability through GitHub's private **Security → Report a vulnerability** form on this repository, not in a public issue.

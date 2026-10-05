@@ -1,0 +1,38 @@
+{
+  "_doc": "Recipe lanes: a model (by its library id) that is played by its own start/stop scripts instead of Ollama / vLLM / SGLang. The deck still enforces the guard: one GPU engine at a time, need_gib checked, everything it would stop named, Ollama never stopped for you. start/stop run with MCC_MODEL_DIR, MCC_MODEL_ID, MCC_PORT and 'env' set; '{model_dir}' in env values becomes the local copy path. copy:false = the recipe keeps its own weights (INSERT only starts it).",
+
+  "Qwen/Qwen3.8-Flash-Next/Vontra-MLX-4bit-MTP": {
+    "label": "TensorFold",
+    "engine": "tensorfold",
+    "served": "Qwen3.8-Flash-Next",
+    "quant": "MLX 4-bit + MTP",
+    "nodes": 1,
+    "need_gib": 112,
+    "port": 8888,
+    "health_path": "/health",
+    "requires_ollama_stopped": true,
+    "copy": false,
+    "start": "cd ~/recipes/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold && ./start.sh",
+    "stop": "cd ~/recipes/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold && ./stop.sh",
+    "start_timeout_s": 1800,
+    "env": {"PORT": "8888"},
+    "repo": "https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold",
+    "license": "recipe: MIT (see its LICENSE) · weights: see the model card"
+  },
+
+  "Qwen/Qwen3.8-27B/Vontra-MLX-4bit": {
+    "label": "TensorFold 27B",
+    "engine": "tensorfold",
+    "served": "Qwen3.8-27B",
+    "nodes": 1,
+    "need_gib": 104,
+    "port": 8887,
+    "requires_ollama_stopped": true,
+    "copy": false,
+    "start": "cd ~/recipes/Qwen3.8-27B-DGX-Spark-TensorFold && ./start.sh",
+    "stop": "cd ~/recipes/Qwen3.8-27B-DGX-Spark-TensorFold && ./stop.sh",
+    "env": {"PORT": "8887"},
+    "repo": "https://github.com/MiaAI-Lab/Qwen3.8-27B-DGX-Spark-TensorFold",
+    "license": "recipe: Apache-2.0 · weights: see the model card"
+  }
+}

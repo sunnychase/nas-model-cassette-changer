@@ -13,6 +13,7 @@ a{color:var(--acc)}h1{font-size:17px;letter-spacing:.14em;margin:0}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .chip{font-size:11px;padding:1px 8px;border:1px solid var(--bd);border-radius:10px;white-space:nowrap}
 .k1{color:var(--t1);border-color:#14532d}.k2{color:var(--t2);border-color:#0c4a6e}.k3{color:var(--t3);border-color:#4c1d95}.k4{color:var(--t4);border-color:#78350f}.k0{color:var(--tx9);border-color:#7f1d1d}
+.rcp{color:#f0abfc;border-color:#86198f;background:#2a0f2e}.eng{color:#bae6fd;border-color:#0c4a6e}
 .new{background:#14532d;color:#bbf7d0;border-color:#166534}.loc{background:#0c2a4a;color:#bae6fd;border-color:#0c4a6e}
 .dim{color:var(--dim)}.ok{color:#22c55e}.warnc{color:var(--warn)}
 .top{display:grid;grid-template-columns:minmax(280px,380px) 1fr;gap:12px;margin:12px 0}
@@ -44,7 +45,7 @@ h3{margin:16px 0 6px;font-size:12px;letter-spacing:.12em;color:var(--dim)}
 </style>
 </head>
 <body>
-<div class="row"><h1>📼 NAS MODEL CASSETTE CHANGER</h1><span class="dim">every model on the NAS · insert · eject · never evicts without your say-so</span></div>
+<div class="row"><h1>📼 NAS MODEL CASSETTE CHANGER</h1><span class="dim">every model on the NAS · Ollama · vLLM · SGLang · recipe lanes · never evicts without your say-so</span></div>
 <div class="bar row" id="hdr">loading…</div>
 <div id="job"></div>
 <div class="top">
@@ -77,6 +78,7 @@ let TOKEN="";try{const qp=new URLSearchParams(location.search).get("t");if(qp){l
 const $=id=>document.getElementById(id),PICK={},SHUT=new Set();let D=null,timer=null;
 const TN=k=>k?`${k} NODE${k>1?"S":""}`:"BEYOND THE FLEET",TC=k=>"k"+(k&&k<=4?k:0);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+const EL={vllm:"vLLM",sglang:"SGLang",ollama:"Ollama"},eng=u=>u.recipe_key?"":u.engine?" · "+(EL[u.engine]||u.engine):"";
 const tchip=k=>`<span class="chip ${TC(k)}">${k?k+"× node":"beyond"}</span>`;
 async function api(path,body){const o={headers:{"X-Token":TOKEN}};if(body){o.method="POST";o.headers["Content-Type"]="application/json";o.body=JSON.stringify(body);}
  let r=await fetch(path,o);if(r.status==403){const t=prompt("Access token (from ~/.config/mcc/token on the GPU box):");if(!t)throw new Error("no token");TOKEN=t.trim();try{localStorage.setItem("mcc_token",TOKEN)}catch(e){};o.headers["X-Token"]=TOKEN;r=await fetch(path,o);}
@@ -93,7 +95,7 @@ function hdr(){const nas=D.nas||{},t=D.tiers||{};const built=esc((D.library_buil
  const ts=$("tier");if(ts.options.length==1){for(let k=1;k<=D.max_nodes;k++)ts.add(new Option(TN(k).toLowerCase(),k));ts.add(new Option("beyond the fleet",0));}
  const cs=$("cat");if(cs.options.length==1)[...new Set(D.shelf.map(r=>r.category))].sort().forEach(c=>cs.add(new Option(c,c)));}
 function tape(){const p=D.playing||{},j=D.job||{};const on=!!p.id||j.running;const label=j.running?j.what.replace(/^INSERT /,""):(p.id||"— empty —");
- const sub=j.running?(j.progress||"starting…"):p.id?`${p.runtime||""} · ${p.name||""}${p.port?" · :"+p.port:""}`:"insert a cassette from the shelf below";
+ const sub=j.running?(j.progress||"starting…"):p.id?`${p.label||EL[p.runtime]||p.runtime||""} · ${p.name||""}${p.port?" · :"+p.port:""}`:"insert a cassette from the shelf below";
  $("tape").innerHTML=`<div class="why" style="letter-spacing:.14em">${j.running?"LOADING":p.id?"NOW PLAYING":"DECK EMPTY"}</div>
  <svg viewBox="0 0 340 210" class="${on?"spin":""}" role="img" aria-label="cassette"><defs><linearGradient id="sh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1e293b"/><stop offset="1" stop-color="#0f172a"/></linearGradient></defs>
  <rect x="6" y="6" width="328" height="198" rx="14" fill="url(#sh)" stroke="${on?"#38b6ff":"#334155"}" stroke-width="2"/>
@@ -104,21 +106,21 @@ function tape(){const p=D.playing||{},j=D.job||{};const on=!!p.id||j.running;con
  <g class="reel"><circle cx="110" cy="127" r="24" fill="#1f2937" stroke="#64748b"/><circle cx="110" cy="127" r="7" fill="#020617"/>${[0,60,120,180,240,300].map(a=>`<rect x="108" y="105" width="4" height="9" fill="#64748b" transform="rotate(${a} 110 127)"/>`).join("")}</g>
  <g class="reel"><circle cx="230" cy="127" r="${on?17:24}" fill="#1f2937" stroke="#64748b"/><circle cx="230" cy="127" r="7" fill="#020617"/>${[0,60,120,180,240,300].map(a=>`<rect x="228" y="105" width="4" height="9" fill="#64748b" transform="rotate(${a} 230 127)"/>`).join("")}</g>
  <path d="M60 204 L84 176 L256 176 L280 204" fill="#0b1220" stroke="#334155"/><circle cx="108" cy="190" r="4" fill="#334155"/><circle cx="232" cy="190" r="4" fill="#334155"/></svg>
- <div class="row">${p.id||D.residents.vllm_running?`<button class="warn" onclick="eject()">⏏ EJECT</button>`:""}${p.id?`<span class="why">${esc(p.unit||"")}</span>`:""}</div>`;}
+ <div class="row">${p.id||(D.residents.engines_running||[]).length?`<button class="warn" onclick="eject()">⏏ EJECT</button>`:""}${p.id?`<span class="why">${esc(p.unit||"")}</span>`:""}</div>`;}
 function slots(){$("slots").innerHTML=(D.slots||[]).map(s=>{if(!s.online)return `<div class="slot off"><b>${esc(s.name)}</b> <span class=dim>${esc(s.note||"")}</span><div class=dim>offline — ${esc(s.why||"")}</div></div>`;
  if(!s.self)return `<div class="slot"><b>${esc(s.name)}</b> <span class=dim>${esc(s.note||"")}</span><div class=dim>online · ${s.mem_avail_gib??"?"} GiB free</div><div class=why>multi-node units launch from their kit</div></div>`;
  const used=s.mem_total_gib?Math.max(0,Math.min(100,100*(1-s.mem_avail_gib/s.mem_total_gib))):0;
  const lanes=(s.lanes||[]).map(l=>`<div class="cass">▶ ${esc(l)} <span class=dim>big lane</span></div>`).join("");
  const oll=(s.ollama||[]).map(o=>`<div class="cass ${(D.protected||[]).includes(o.name)?"prot":""}">▶ ${esc(o.name)} <span class=dim>Ollama · ${o.gib} GiB${(D.protected||[]).includes(o.name)?" · protected":""}${o.name.startsWith("deck/")?" · deck":""}</span></div>`).join("");
- const v=s.vllm_running?`<div class="cass">▶ vLLM cassette <span class=dim>${esc((D.playing||{}).name||"")}</span></div>`:"";
+ const v=(s.engines_running||[]).map(e=>`<div class="cass">▶ ${esc(e.name)} <span class=dim>${e.recipe?"recipe lane":"engine"} · ${esc((D.playing||{}).name||"")}</span></div>`).join("")+(s.ollama_up===false?`<div class="cass" style="opacity:.7">Ollama stopped</div>`:"");
  return `<div class="slot"><b>${esc(s.name)}</b> <span class=dim>${esc(s.note||"")} · budget ${s.budget_gib} GiB</span><div class="mem"><i style="width:${used.toFixed(0)}%"></i></div>
  <div class=dim>memory ${s.mem_avail_gib}/${s.mem_total_gib} GiB free · disk ${s.free_disk_gb} GB${s.max_loaded?` · Ollama ≤ ${s.max_loaded} models`:""}</div>${lanes}${oll}${v}${lanes||oll||v?"":`<div class="cass" style="opacity:.6">idle</div>`}</div>`;}).join("");}
 function status(m,key){const p=m.plans[key]||{};return p.refuse?`<div class=why>✗ ${esc(p.refuse)}</div>`:(p.would_evict||[]).length?`<div class="why warnc">would stop: ${p.would_evict.map(esc).join(", ")}</div>`:`<div class="why ok">✓ fits beside what is running</div>`;}
 function pick(sel){const tr=sel.closest("tr"),m=D.shelf.find(x=>x.id==tr.dataset.id);PICK[m.id]=sel.value;const p=m.plans[sel.value]||{};tr.querySelector(".ins").disabled=!!p.refuse||D.job.running;tr.querySelector(".st").innerHTML=status(m,sel.value);}
 function rowHtml(m){const us=m.units||[];const def=PICK[m.id]||(us.find(u=>!(m.plans[u.key]||{}).refuse)||us[0]||{}).key;const p=m.plans[def]||{};
- const sel=us.length>1?`<select onchange="pick(this)">${us.map(u=>`<option value="${esc(u.key)}" ${u.key==def?"selected":""}>${esc(u.quant||u.key)} · ${u.gb} GB → ${u.nodes?u.nodes+"×":"beyond"}</option>`).join("")}</select>`:`<span class="chip ${TC(us[0]&&us[0].nodes)}">${esc((us[0]||{}).quant||"whole folder")} · ${(us[0]||{}).gb} GB</span>`;
+ const sel=us.length>1?`<select onchange="pick(this)">${us.map(u=>`<option value="${esc(u.key)}" ${u.key==def?"selected":""}>${esc(u.quant||u.key)} · ${u.gb} GB → ${u.nodes?u.nodes+"×":"beyond"}${eng(u)}</option>`).join("")}</select>`:(us[0]&&us[0].recipe_key?`<span class="chip rcp">${esc(m.recipe.label)} recipe · ${us[0].gb} GB → ${us[0].nodes}×</span>`:`<span class="chip ${TC(us[0]&&us[0].nodes)}">${esc((us[0]||{}).quant||"whole folder")} · ${(us[0]||{}).gb} GB${eng(us[0]||{})}</span>`);
  const kits=(m.kits||[]).map(k=>`<span class="chip" title="${esc(k.source||"")}">kit: ${esc(k.repo)}</span>`).join(" ");
- return `<tr data-id="${esc(m.id)}"><td><b>${esc(m.model)}</b> <span class=dim>${esc(m.variant)}</span><div class=row style="gap:4px;margin-top:3px"><span class="dim">${esc(m.maker)}</span>${m.new?'<span class="chip new">NEW</span>':""}${m.local?'<span class="chip loc">on this box</span>':""}${m.partial?'<span class="chip warnc">partial copy</span>':""}${m.status!="complete"?`<span class="chip warnc">${esc(m.status)}</span>`:""}${kits}</div></td>
+ return `<tr data-id="${esc(m.id)}"><td><b>${esc(m.model)}</b> <span class=dim>${esc(m.variant)}</span><div class=row style="gap:4px;margin-top:3px"><span class="dim">${esc(m.maker)}</span>${m.new?'<span class="chip new">NEW</span>':""}${m.local?'<span class="chip loc">on this box</span>':""}${m.partial?'<span class="chip warnc">partial copy</span>':""}${m.status!="complete"?`<span class="chip warnc">${esc(m.status)}</span>`:""}${m.recipe?`<span class="chip rcp" title="${esc((m.recipe.license||"")+(m.recipe.repo?" · "+m.recipe.repo:""))}">recipe: ${esc(m.recipe.label)} · needs ${m.recipe.need_gib} GiB${m.recipe.requires_ollama_stopped?" · Ollama off":""}</span>`:""}${kits}</div></td>
  <td><span class=chip>${esc(m.category)}</span> <span class=dim>${esc(m.format)}${m.quant?" · "+esc(m.quant):""}</span></td><td style="white-space:nowrap">${m.size_gb} GB</td><td>${sel}${!m.units_exact?'<div class=why>per-quant sizes after the next sync</div>':""}</td>
  <td class=st>${status(m,def)}</td><td><button class=ins ${p.refuse||D.job.running?"disabled":""} onclick="insert(this)">INSERT</button></td></tr>`;}
 function draw(){if(!D)return;hdr();tape();slots();

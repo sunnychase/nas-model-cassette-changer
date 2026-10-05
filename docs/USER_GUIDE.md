@@ -6,12 +6,13 @@
 4. [Set up the GPU box](#4-set-up-the-gpu-box)
 5. [Using the page](#5-using-the-page)
 6. [The guard, rule by rule](#6-the-guard-rule-by-rule)
-7. [Configuration reference](#7-configuration-reference)
-8. [Remote access](#8-remote-access)
-9. [More than one GPU node](#9-more-than-one-gpu-node)
-10. [Troubleshooting](#10-troubleshooting)
-11. [HTTP API](#11-http-api)
-12. [FAQ](#12-faq)
+7. [Engines and recipe lanes (SGLang, TensorFold)](#7-engines-and-recipe-lanes-sglang-tensorfold)
+8. [Configuration reference](#8-configuration-reference)
+9. [Remote access](#9-remote-access)
+10. [More than one GPU node](#10-more-than-one-gpu-node)
+11. [Troubleshooting](#11-troubleshooting)
+12. [HTTP API](#12-http-api)
+13. [FAQ](#13-faq)
 
 ---
 
@@ -28,13 +29,34 @@ A **cassette** is one runnable unit:
 - for a GGUF repo, one quantisation (split shards are grouped, and a vision projector `mmproj` is attached);
 - for safetensors, the whole folder.
 
-**Insert** copies the unit to `~/models/deck/<Maker>/<Model>/<Variant>/` with `rsync --partial`, so an interrupted copy resumes. It then starts the unit: a GGUF is registered as `deck/<name>` in Ollama and warm-loaded; a safetensors folder runs in a `vllm/vllm-openai` container on port 8010.
+**Insert** copies the unit to `~/models/deck/<Maker>/<Model>/<Variant>/` with `rsync --partial`, so an interrupted copy resumes. It then starts the unit:
+
+- a GGUF is registered as `deck/<name>` in Ollama and warm-loaded;
+- a safetensors folder runs in a **vLLM** (`vllm/vllm-openai`, port 8010) or **SGLang** (`lmsysorg/sglang`, port 30000) container, whichever you pick in the unit menu;
+- a model listed in `recipes.json` is started by its **recipe lane**, for example a TensorFold serving recipe (§7).
 
 ## 2. Requirements
 
 **NAS:** Linux, Python 3.9+, your model folders on local disk. It must be reachable by ssh from the GPU box (key auth). An NFS or SMB export is optional; it only matters if you want to browse the library by hand.
 
-**GPU box:** Linux, Python 3.9+, `ssh`, `rsync`, plus [Ollama](https://ollama.com) for GGUF cassettes and/or Docker with the NVIDIA container toolkit for vLLM cassettes. It needs enough local NVMe for the largest model you plan to insert, with room to spare.
+**GPU box:** Linux, Python 3.9+, `ssh`, `rsync`, plus [Ollama](https://ollama.com) for GGUF cassettes and/or Docker with the NVIDIA container toolkit for vLLM / SGLang cassettes. Recipe lanes need whatever their own scripts need. It needs enough local NVMe for the largest model you plan to insert, with room to spare.
+
+### 2.1 Network: use 10 GbE
+
+Every INSERT copies the whole model, so the link between the NAS and the GPU box decides the wait:
+
+| Link | Copy rate | 65 GB model |
+|---|---|---|
+| 1 GbE | ~110 MB/s | ~10 min |
+| 2.5 GbE | ~280 MB/s | ~4 min |
+| **10 GbE** | **~800–1100 MB/s** | **~1–1.5 min** |
+
+**Use 10 GbE if you can**: a 10 GbE NIC on each box, plus a 10 GbE switch or a direct cable. Some tips:
+
+- **Disks:** the NAS disks must keep up, because one hard drive delivers only about 150–250 MB/s. Use several drives, an SSD/NVMe pool or a read cache.
+- **Jumbo frames:** they are optional. If you enable them, every device on the path must support them.
+- **Trouble:** if a 10 GbE copy crawls at a few MB/s while iperf looks fine one way, try turning off LRO/GRO on the NAS NIC (`ethtool -K <if> lro off gro off`). Some 10 GbE chipsets mishandle receive offload.
+- **Eject:** ejecting never touches the network. It stops the model and, if you ask, deletes the local copy. With 10 GbE, deleting local copies you aren't using costs little, because putting one back takes about a minute.
 
 ## 3. Set up the NAS
 
@@ -137,17 +159,87 @@ An insert is **refused** (HTTP 409, nothing done) when:
 | A protected model is not installed in Ollama | A typo in the config would otherwise silently protect nothing. |
 | Not enough local disk | GGUF needs about 2.2 × its size, because `ollama create` writes a copy; safetensors needs about 1.1 ×. |
 | It doesn't fit even after evicting every unprotected model | See below. |
+| A vLLM, SGLang or recipe cassette is already playing | One GPU engine at a time: EJECT it first. |
+| The engine isn't listed in the model's runtime, or isn't enabled in `engines` | |
+| Ollama is stopped and the unit is a GGUF | GGUF cassettes play in Ollama. vLLM / SGLang / recipe inserts are still allowed. |
 
 **Memory check for GGUF:** the cassette needs `1.2 × W + 3 + kv_band_gib` GiB, at `num_ctx`. Free memory is `MemAvailable − mem_floor_gib − reserve`. The *reserve* is the room for each protected model that is not loaded right now: its largest observed footprint, or 1.3 × its size + 1.5 GiB. If the cassette doesn't fit, the deck picks evictions in this order: older deck cassettes first, then unprotected models from largest to smallest. It also counts Ollama's own slot limit (`ollama_max_loaded`).
 
-**For safetensors (vLLM):** the container takes most of the GPU, so it would stop every big lane and every Ollama model, protected ones included. The dialog names them all.
+**For safetensors (vLLM or SGLang):** the container takes most of the GPU, so it would stop every big lane and every Ollama model, protected ones included. The dialog names them all.
+
+**For a recipe lane:** see §7. It states its own `need_gib`, and is refused if the memory that would be free after the named stops is smaller.
 
 **Any eviction needs every name confirmed.** Then:
 
 1. The plan is computed again after the copy, which can take minutes. If anything changed, nothing is evicted and you are asked again.
 2. After a GGUF loads, the deck checks that every protected model that was loaded before is still loaded. If Ollama dropped one anyway, the new cassette is unloaded and the log says so.
 
-## 7. Configuration reference
+## 7. Engines and recipe lanes (SGLang, TensorFold)
+
+### 7.1 vLLM or SGLang
+
+Every complete safetensors text model gets one unit per enabled engine that its runtime lists. The indexer lists `vllm` and `sglang` for safetensors text models. In the **unit → nodes** menu, `· vLLM` and `· SGLang` mark the two choices. Both containers mount `local_dir` read-only and serve the OpenAI-compatible API:
+
+| | vLLM | SGLang |
+|---|---|---|
+| image | `vllm/vllm-openai:latest` | `lmsysorg/sglang:latest` |
+| port | 8010 | 30000 |
+| memory knob | `gpu_memory_utilization` 0.85 | `mem_fraction_static` 0.85 |
+| context | `max_model_len` 32768 | `context_length` 32768 |
+| container | `mcc-vllm` | `mcc-sglang` |
+
+To offer only one engine, set `"engines": ["vllm"]` (or `["sglang"]`). An API insert without a `unit` uses the first engine.
+
+### 7.2 Recipe lanes
+
+Some models run best under their own serving recipe: a container plus `start.sh`/`stop.sh` with settings tuned for one model on one machine. **TensorFold** recipes are the main example. A recipe lane lets the deck insert and eject such a model without knowing anything about how it is served.
+
+Copy `examples/recipes.example.json` to `~/.config/mcc/recipes.json`. Each key is a **library id**, exactly as the shelf shows it:
+
+```json
+{
+  "Qwen/Qwen3.8-Flash-Next/Vontra-MLX-4bit-MTP": {
+    "label": "TensorFold",
+    "engine": "tensorfold",
+    "nodes": 1,
+    "need_gib": 112,
+    "port": 8888,
+    "health_path": "/health",
+    "requires_ollama_stopped": true,
+    "copy": false,
+    "start": "cd ~/recipes/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold && ./start.sh",
+    "stop":  "cd ~/recipes/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold && ./stop.sh",
+    "env": {"PORT": "8888"},
+    "repo": "https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold",
+    "license": "recipe: MIT · weights: see the model card"
+  }
+}
+```
+
+| key | required | meaning |
+|---|---|---|
+| `start` | yes | shell command, run detached with `MCC_MODEL_DIR`, `MCC_MODEL_ID`, `MCC_PORT` and `env` set |
+| `stop` | recommended | shell command that EJECT runs (without one, EJECT tells you to stop it yourself) |
+| `port`, `health_path` | yes / `/health` | the deck polls `http://127.0.0.1:<port><health_path>` until it answers (`start_timeout_s`, default 1800) |
+| `need_gib` | yes | total memory the recipe needs. Its INSERT is refused if less would be free after the named stops |
+| `nodes` | 1 | a recipe that needs more than one node is refused (launch it from its kit) |
+| `requires_ollama_stopped` | false | if true, the INSERT is refused while Ollama answers. Stop Ollama yourself (`sudo systemctl stop ollama`); the deck never stops system services |
+| `copy` | true | `false` = the recipe keeps its own weights (TensorFold uses its own Hugging Face cache, `HF_CACHE` in its `.env`), so INSERT only starts it. `true` = the deck copies the variant from the NAS first and passes the path as `MCC_MODEL_DIR` (use `"{model_dir}"` inside `env` values) |
+| `label`, `engine`, `served`, `quant`, `repo`, `license` | | shown on the page |
+
+**TensorFold, step by step:**
+
+1. Clone the recipe repository for your model (for example [MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold) or [MiaAI-Lab/Qwen3.8-27B-DGX-Spark-TensorFold](https://github.com/MiaAI-Lab/Qwen3.8-27B-DGX-Spark-TensorFold)) to `~/recipes/`.
+2. Run its `start.sh` once by hand, following its README. The first run pulls the image and the weights and compiles kernels. Run its `stop.sh` when it answers.
+3. Make sure the model's folder is on the NAS, so its row appears on the shelf, and use that row's id as the key in `recipes.json`.
+4. Set `need_gib` from the recipe's README (a 128 GB unified-memory node: about 112 for Qwen3.8-Flash-Next, about 104 for Qwen3.8-27B).
+5. If the recipe needs the whole GPU, stop Ollama, then press INSERT on the row. The deck starts it, waits for `/health`, and shows it as **NOW PLAYING**. EJECT runs `stop.sh`.
+
+TensorFold and its recipes are separate projects with their own licences. This repository ships no TensorFold code, only an example `recipes.json` that calls the scripts from your own checkout.
+
+Try it with no hardware: `python3 deck/mcc_deck.py serve --demo --demo-no-ollama`, then insert the **Qwen3.8-Flash-Next** row.
+
+## 8. Configuration reference
 
 ### `nas.json`
 
@@ -178,8 +270,11 @@ An insert is **refused** (HTTP 409, nothing done) when:
 | `servable_categories` | LLMs, Coding, Small-On-Device | |
 | `ollama_url`, `ollama_max_loaded` | `http://127.0.0.1:11434`, `3` | |
 | `num_ctx`, `kv_band_gib`, `mem_floor_gib` | `8192`, `4`, `10` | GGUF sizing |
-| `big_lanes` | `[]` | systemd user units that hold the GPU; a vLLM insert stops them by name |
+| `big_lanes` | `[]` | systemd user units that hold the GPU; a vLLM / SGLang / recipe insert stops them by name |
+| `engines` | `["vllm", "sglang"]` | engines offered for safetensors models |
 | `vllm.*` | image, port 8010, 0.85, 32768, `trust_remote_code: false` | container settings |
+| `sglang.*` | image, port 30000, `mem_fraction_static` 0.85, `context_length` 32768, `trust_remote_code: false` | container settings |
+| `recipes_file` | `~/.config/mcc/recipes.json` | recipe lanes (§7.2); a missing file means there are none |
 | `new_days` | `7` | how long the NEW badge lasts |
 
 **Tuning the fit for other hardware:**
@@ -190,7 +285,7 @@ An insert is **refused** (HTTP 409, nothing done) when:
 
 `mcc_deck.py fit 70` prints the node count for a 70 GB unit under your config.
 
-## 8. Remote access
+## 9. Remote access
 
 The deck listens on localhost and requires the token on every API call. To use it from your phone, pick one:
 
@@ -200,11 +295,11 @@ The deck listens on localhost and requires the token on every API call. To use i
 
 Don't expose the port directly to the internet. The token is a single shared secret, and INSERT/EJECT can stop running models.
 
-## 9. More than one GPU node
+## 10. More than one GPU node
 
 List the other nodes in `fleet` with an ssh target; the page shows each one's free memory. The tiers tell you which models need 2, 3 or 4 nodes. Inserting those is intentionally refused, because multi-node serving depends on your interconnect and launcher. Keep the launch recipe in a kit folder on the NAS so it shows next to the model.
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 | Symptom | Fix |
 |---|---|
@@ -213,13 +308,16 @@ List the other nodes in `fleet` with an ssh target; the page shows each one's fr
 | GGUF shows *per-quant sizes after the next sync* | The sync couldn't list `.gguf` files. Check that `find` can read the library over ssh. |
 | *protected model(s) … not found in Ollama* | Fix the tag spelling in `protected` (compare with `ollama list`). |
 | *cannot read Ollama right now* | Is `ollama serve` up at `ollama_url`? The guard refuses rather than guessing. |
-| vLLM cassette never answers | Run `docker logs mcc-vllm`. Common causes: a model that needs `trust_remote_code`, a too-large `max_model_len`, or a quant format your GPU doesn't support. |
+| vLLM / SGLang cassette never answers | Run `docker logs mcc-vllm` (or `mcc-sglang`). Common causes: a model that needs `trust_remote_code`, a too-large context setting, or a quant format your GPU or that engine doesn't support. |
+| Recipe row says *stop Ollama first* | The recipe has `requires_ollama_stopped`. Stop Ollama, insert, and start Ollama again after EJECT. |
+| Recipe never answers | Run its `start` command by hand and watch the deck log. Check that `port` and `health_path` match what the recipe actually serves. |
+| Copy speed far below the link speed | The NAS disks, not the network, are the limit (one HDD ≈ 150–250 MB/s). See §2.1. |
 | Copy is slow | rsync runs over ssh. Use a wired link to the NAS; a single HDD tops out around 150–250 MB/s. |
 | Token prompt keeps coming back | The page stores the token in your browser. Clear the site data and paste the current contents of `~/.config/mcc/token`. |
 
 The deck log on the page shows the last copy or start. `journalctl --user -u mcc-deck -u mcc-sync` shows the services.
 
-## 11. HTTP API
+## 12. HTTP API
 
 Every call except `/` and `/api/health` needs the header `X-Token: <token>`.
 
@@ -229,7 +327,7 @@ Every call except `/` and `/api/health` needs the header `X-Token: <token>`.
 | GET | `/api/deck[?refresh=1]` | | full state: shelf, plans, slots, playing, history (`refresh` starts a background sync) |
 | GET | `/api/deck/summary` | | counts per tier, NAS status |
 | GET | `/api/deck/log` | | the last copy/start log and the current job |
-| POST | `/api/deck/insert` | `{"id", "unit", "confirm_evict": [names]}` | `{"started": true}`, or `409 {"error", "would_evict"}` |
+| POST | `/api/deck/insert` | `{"id", "unit", "confirm_evict": [names]}` (`unit` = a key from the row's `units`, e.g. `"(whole variant) · SGLang"`) | `{"started": true}`, or `409 {"error", "would_evict"}` |
 | POST | `/api/deck/eject` | `{"id"?, "remove_local"?}` | `{"done": [...]}` |
 
 Example:
@@ -240,13 +338,15 @@ curl -s -H "X-Token: $T" http://127.0.0.1:8099/api/deck/summary
 curl -s -H "X-Token: $T" -d '{"id":"OpenAI/gpt-oss-20b/ggml-org-GGUF"}' http://127.0.0.1:8099/api/deck/insert
 ```
 
-## 12. FAQ
+## 13. FAQ
 
 **Why not just run models straight off the NAS share?** Loading a model reads every byte, often more than once, and network page-cache misses make it slow and fragile. Copy once to NVMe, then run.
 
 **Does the sync wake my NAS?** No. It makes one ssh attempt with a 5-second timeout. If the NAS doesn't answer, it records *asleep* and keeps the last index.
 
-**Can I use it without Ollama, or without Docker?** Yes. GGUF needs only Ollama, safetensors only Docker; whichever is missing just refuses that path.
+**Can I use it without Ollama, or without Docker?** Yes. GGUF needs only Ollama, vLLM/SGLang only Docker; whichever is missing just refuses that path.
+
+**Why not run several engines at once?** On a single GPU box, vLLM, SGLang and most recipes each reserve most of the GPU memory up front. Running two at once fails at load time or runs out of memory later, so the deck allows one at a time.
 
 **Where is the data?** On the GPU box: `~/.local/state/mcc/` (index copy, history, log) and `~/models/deck/` (cassettes). On the NAS: `library/` and the per-model `manifest.json` and `ABOUT-MODEL.md`.
 

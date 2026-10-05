@@ -5,6 +5,7 @@ here="$(cd "$(dirname "$0")/.." && pwd)"
 dst="$HOME/.local/share/mcc"; mkdir -p "$dst" "$HOME/.config/mcc" "$HOME/.config/systemd/user"
 install -m 0755 "$here/deck/mcc_deck.py" "$dst/mcc_deck.py"; install -m 0644 "$here/deck/deck.html" "$dst/deck.html"
 [ -f "$HOME/.config/mcc/deck.json" ] || install -m 0600 "$here/examples/deck.example.json" "$HOME/.config/mcc/deck.json"
+install -m 0644 "$here/examples/recipes.example.json" "$HOME/.config/mcc/recipes.example.json"   # copy to recipes.json to enable recipe lanes
 install -m 0644 "$here"/deck/systemd/mcc-*.service "$here"/deck/systemd/mcc-*.timer "$HOME/.config/systemd/user/"
 systemctl --user daemon-reload
 echo "Installed to $dst. Next:"
