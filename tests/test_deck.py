@@ -204,5 +204,47 @@ class DemoRoundTrip(unittest.TestCase):
         self.assertIn("error", deck.eject("../../etc", remove_local=True))
 
 
+
+class FormFitFunction(unittest.TestCase):
+    """v1.2: sections by FUNCTION, rows ordered by FIT (taken from the guard's own plans), FORM shown per row."""
+    def u(self, key="Q4", gb=20, nodes=1): return {"key": key, "quant": key, "bytes": int(gb * 1e9), "nodes": nodes}
+
+    def test_function_of_maps_categories_and_falls_back(self):
+        c = cfg()
+        self.assertEqual(D.function_of("LLMs", c)[0], "chat"); self.assertEqual(D.function_of("Speech-ASR", c)[0], "speech")
+        self.assertEqual(D.function_of("Robotics", c), ("other", "Other"))
+
+    def test_ready_when_a_unit_fits_without_stops(self):
+        us = [self.u("Q8", 40), self.u("Q4", 20)]; plans = {"Q8": {"path": "ollama", "would_evict": ["a"]}, "Q4": {"path": "ollama", "would_evict": []}}
+        f = D.fit_of(GGUF, us, plans, cfg()); self.assertEqual((f["class"], f["unit"]), ("ready", "Q4"))
+
+    def test_switch_picks_the_fewest_stops_and_names_them(self):
+        us = [self.u("A"), self.u("B")]; plans = {"A": {"would_evict": ["x", "y"]}, "B": {"would_evict": ["x"]}}
+        f = D.fit_of(GGUF, us, plans, cfg()); self.assertEqual((f["class"], f["unit"], f["stops"]), ("switch", "B", ["x"]))
+
+    def test_blocked_keeps_the_guards_reason(self):
+        f = D.fit_of(GGUF, [self.u()], {"Q4": {"refuse": "Ollama is not running"}}, cfg())
+        self.assertEqual((f["class"], f["why"]), ("blocked", "Ollama is not running"))
+
+    def test_nodes_when_no_single_node_unit(self):
+        f = D.fit_of(GGUF, [self.u("Q8", 300, 3)], {"Q8": {"refuse": "needs 3 nodes"}}, cfg()); self.assertEqual(f["class"], "nodes")
+        f = D.fit_of(GGUF, [self.u("X", 900, None)], {"X": {"refuse": "beyond"}}, cfg()); self.assertEqual(f["class"], "nodes")
+
+    def test_app_and_pending_precede_plans(self):
+        img = {**ST, "category": "Image"}
+        f = D.fit_of(img, [self.u()], {"Q4": {"refuse": "Image model"}}, cfg(apps={"image": {"label": "ComfyUI", "url": "http://x"}}))
+        self.assertEqual((f["class"], f["app"]["label"]), ("app", "ComfyUI"))
+        self.assertEqual(D.fit_of({**GGUF, "status": "downloading"}, [self.u()], {"Q4": {"would_evict": []}}, cfg())["class"], "pending")
+
+    def test_state_sections_and_counts_add_up(self):
+        with tempfile.TemporaryDirectory() as t:
+            c = D.load_config(None); c.update(state_dir=f"{t}/s", local_dir=f"{t}/d", protected=["qwen3:14b"], fleet=[{"name": "n1", "self": True}])
+            c["_recipes"] = {k: {**D.RECIPE_DEFAULTS, **v, "key": k} for k, v in D.DEMO_RECIPES.items()}
+            D.demo_seed(c); st = D.Deck(c, D.DemoSystem(c)).state()
+            self.assertEqual(sum(f["n"] for f in st["functions"]), st["n_shelf"])
+            for f in st["functions"]: self.assertEqual(sum(f["fit"].values()), f["n"])
+            order = [r["function"] for r in st["shelf"]]; keys = [f["key"] for f in st["functions"]]
+            self.assertEqual(order, sorted(order, key=keys.index))        # rows come out grouped in function order
+
 if __name__ == "__main__":
     unittest.main()

@@ -41,6 +41,19 @@ input,select{background:#0f141c;color:var(--tx);border:1px solid var(--bd);borde
 #dlg .box{background:var(--card);border:1px solid var(--bad);border-radius:10px;padding:16px;max-width:520px;margin:16px}
 #dlg label{display:block;margin:4px 0}
 h3{margin:16px 0 6px;font-size:12px;letter-spacing:.12em;color:var(--dim)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 6px}
+.tab{background:var(--card);border:1px solid var(--bd);color:var(--tx);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600}
+.tab.on{border-color:var(--acc);background:#0c2a4a}.tab b{color:var(--dim);font-weight:500;margin-left:6px}
+.lbl{font-size:10.5px;letter-spacing:.14em;color:var(--dim)}
+.fchip{cursor:pointer;user-select:none}.fchip.off{opacity:.3;text-decoration:line-through}
+.f-ready{color:#22c55e;border-color:#14532d}.f-switch{color:#f59e0b;border-color:#78350f}.f-blocked{color:#f87171;border-color:#7f1d1d}
+.f-nodes{color:#a78bfa;border-color:#4c1d95}.f-app{color:#38b6ff;border-color:#0c4a6e}.f-pending{color:#8b95a5}
+.sub{font-size:11px;letter-spacing:.1em;margin:10px 0 5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.fmt{font-family:ui-monospace,Menlo,monospace}button.sw{background:#b45309}
+section h2{flex-wrap:wrap;row-gap:4px}
+.shelf table{table-layout:fixed}.shelf th:nth-child(1){width:26%}.shelf th:nth-child(2){width:15%}.shelf th:nth-child(3){width:8%}
+.shelf th:nth-child(4){width:20%}.shelf th:nth-child(5){width:21%}.shelf th:nth-child(6){width:10%}
+@media(max-width:640px){.shelf table{table-layout:auto}.shelf th{width:auto!important}}
 @media(max-width:640px){body{padding:10px}th:nth-child(2),td:nth-child(2),th:nth-child(4),td:nth-child(4){display:none}select{max-width:100%}}
 </style>
 </head>
@@ -52,17 +65,17 @@ h3{margin:16px 0 6px;font-size:12px;letter-spacing:.12em;color:var(--dim)}
   <div class="panel tape" id="tape"></div>
   <div class="panel"><div class="row" style="justify-content:space-between"><b style="letter-spacing:.1em;font-size:12px">GPU NODES</b><span class="why" id="online"></span></div><div class="slots" id="slots" style="margin-top:8px"></div></div>
 </div>
+<div class="tabs" id="fns" title="FUNCTION — what the model does"></div>
 <div class="row" style="margin:6px 0">
-  <input id="q" placeholder="search models" oninput="draw()" size="20">
-  <select id="cat" onchange="draw()"><option value="">all categories</option></select>
-  <select id="fmt" onchange="draw()"><option value="">any format</option><option>gguf</option><option>safetensors</option></select>
-  <select id="tier" onchange="draw()"><option value="">all tiers</option></select>
+  <span class="lbl">FIT</span><span id="fits" class="row" style="gap:4px"></span>
+  <span class="lbl" style="margin-left:10px">FORM</span>
+  <select id="fmt" onchange="draw()"><option value="">any format</option><option>gguf</option><option>safetensors</option><option>other</option></select>
+  <input id="q" placeholder="search models" oninput="draw()" size="18">
   <label><input type="checkbox" id="onlynew" onchange="draw()"> new only</label>
-  <label><input type="checkbox" id="onlyok" onchange="draw()"> insertable now</label>
   <button class="ghost" onclick="load(1)" title="ask the NAS for its latest index in the background (never wakes it)">↻ check the NAS</button>
   <span id="n" class="dim"></span>
 </div>
-<div id="secs"></div>
+<div id="secs" class="shelf"></div>
 <h3>EJECTOR · local copies on this box</h3><div id="locals"></div>
 <h3>DECK LOG</h3><div id="log"></div>
 <div class="fit" id="fit"></div>
@@ -76,6 +89,12 @@ h3{margin:16px 0 6px;font-size:12px;letter-spacing:.12em;color:var(--dim)}
 <script>
 let TOKEN="";try{const qp=new URLSearchParams(location.search).get("t");if(qp){localStorage.setItem("mcc_token",qp);history.replaceState(null,"",location.pathname);}TOKEN=localStorage.getItem("mcc_token")||"";}catch(e){}
 const $=id=>document.getElementById(id),PICK={},SHUT=new Set();let D=null,timer=null;
+const LS=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},SS=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+let FN=LS("mcc_fn","all");const FITOFF=new Set(LS("mcc_fitoff",[]));
+const FDESC={ready:"fits beside what is running — one click",switch:"plays after stopping what it names (you tick each one)",blocked:"one node, but refused right now — the reason is on the row",
+ nodes:"bigger than one node — launched from its kit, not from here",app:"not a text model — it runs in its own app",pending:"still downloading on the NAS"};
+function setFn(k){FN=k;SS("mcc_fn",k);draw();}
+function togFit(c){FITOFF.has(c)?FITOFF.delete(c):FITOFF.add(c);SS("mcc_fitoff",[...FITOFF]);draw();}
 const TN=k=>k?`${k} NODE${k>1?"S":""}`:"BEYOND THE FLEET",TC=k=>"k"+(k&&k<=4?k:0);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
 const EL={vllm:"vLLM",sglang:"SGLang",ollama:"Ollama"},eng=u=>u.recipe_key?"":u.engine?" · "+(EL[u.engine]||u.engine):"";
@@ -92,8 +111,7 @@ function hdr(){const nas=D.nas||{},t=D.tiers||{};const built=esc((D.library_buil
  const tiers=[...Array(D.max_nodes).keys()].map(i=>`<span class="chip ${TC(i+1)}">${TN(i+1)} ${t[i+1]||0}</span>`).join(" ");
  $("hdr").innerHTML=`<b>${D.n_shelf}</b>&nbsp;models · ${tiers} <span class="chip k0">BEYOND ${t.beyond||0}</span> ${D.n_new?`<span class="chip new">${D.n_new} new · ${D.new_days} d</span>`:""} · ${nasTxt}${D.syncing?" · <span class=warnc>checking the NAS…</span>":""} · protected ${(D.protected||[]).map(p=>`<span class="chip prot">${esc(p)}</span>`).join(" ")||"<span class=dim>none</span>"}`;
  $("online").textContent=`${D.online_nodes} of ${(D.slots||[]).length} online`;
- const ts=$("tier");if(ts.options.length==1){for(let k=1;k<=D.max_nodes;k++)ts.add(new Option(TN(k).toLowerCase(),k));ts.add(new Option("beyond the fleet",0));}
- const cs=$("cat");if(cs.options.length==1)[...new Set(D.shelf.map(r=>r.category))].sort().forEach(c=>cs.add(new Option(c,c)));}
+}
 function tape(){const p=D.playing||{},j=D.job||{};const on=!!p.id||j.running;const label=j.running?j.what.replace(/^INSERT /,""):(p.id||"— empty —");
  const sub=j.running?(j.progress||"starting…"):p.id?`${p.label||EL[p.runtime]||p.runtime||""} · ${p.name||""}${p.port?" · :"+p.port:""}`:"insert a cassette from the shelf below";
  $("tape").innerHTML=`<div class="why" style="letter-spacing:.14em">${j.running?"LOADING":p.id?"NOW PLAYING":"DECK EMPTY"}</div>
@@ -116,25 +134,40 @@ function slots(){$("slots").innerHTML=(D.slots||[]).map(s=>{if(!s.online)return 
  return `<div class="slot"><b>${esc(s.name)}</b> <span class=dim>${esc(s.note||"")} · budget ${s.budget_gib} GiB</span><div class="mem"><i style="width:${used.toFixed(0)}%"></i></div>
  <div class=dim>memory ${s.mem_avail_gib}/${s.mem_total_gib} GiB free · disk ${s.free_disk_gb} GB${s.max_loaded?` · Ollama ≤ ${s.max_loaded} models`:""}</div>${lanes}${oll}${v}${lanes||oll||v?"":`<div class="cass" style="opacity:.6">idle</div>`}</div>`;}).join("");}
 function status(m,key){const p=m.plans[key]||{};return p.refuse?`<div class=why>✗ ${esc(p.refuse)}</div>`:(p.would_evict||[]).length?`<div class="why warnc">would stop: ${p.would_evict.map(esc).join(", ")}</div>`:`<div class="why ok">✓ fits beside what is running</div>`;}
-function pick(sel){const tr=sel.closest("tr"),m=D.shelf.find(x=>x.id==tr.dataset.id);PICK[m.id]=sel.value;const p=m.plans[sel.value]||{};tr.querySelector(".ins").disabled=!!p.refuse||D.job.running;tr.querySelector(".st").innerHTML=status(m,sel.value);}
+function action(m,key){const f=m.fit||{},p=m.plans[key]||{},busy=D.job.running;
+ if(f.class=="app")return f.app&&f.app.url?`<a href="${esc(f.app.url)}" target="_blank" rel="noopener"><button class=ghost>Open ${esc(f.app.label)}</button></a>`:`<button disabled title="${esc(f.why)}">in its app</button>`;
+ if(f.class=="pending")return `<button disabled>downloading</button>`;
+ if(p.refuse)return `<button class=ins disabled title="${esc(p.refuse)}">${f.class=="nodes"?"needs nodes":"▶ PLAY"}</button>`;
+ return (p.would_evict||[]).length?`<button class="ins sw" ${busy?"disabled":""} onclick="insert(this)" title="stops ${esc(p.would_evict.join(", "))}">⇄ SWITCH &amp; PLAY</button>`:`<button class=ins ${busy?"disabled":""} onclick="insert(this)">▶ PLAY</button>`;}
+function formCell(m){const us=m.units||[],e=[...new Set(us.map(u=>u.recipe_key?(m.recipe||{}).label:u.engine?(EL[u.engine]||u.engine):(m.format=="gguf"?"Ollama":"")).filter(Boolean))];
+ const app=(m.fit||{}).app;return `<span class="chip fmt">${esc(m.format||"?")}</span>${m.quant?` <span class=fmt>${esc(m.quant)}</span>`:""}<div class=why>${esc(m.category)}${e.length?" · "+e.map(esc).join(" / "):app?" · "+esc(app.label):""}</div>`;}
+function pick(sel){const tr=sel.closest("tr"),m=D.shelf.find(x=>x.id==tr.dataset.id);PICK[m.id]=sel.value;tr.querySelector(".act").innerHTML=action(m,sel.value);tr.querySelector(".st").innerHTML=status(m,sel.value);}
 function rowHtml(m){const us=m.units||[];const def=PICK[m.id]||(us.find(u=>!(m.plans[u.key]||{}).refuse)||us[0]||{}).key;const p=m.plans[def]||{};
  const sel=us.length>1?`<select onchange="pick(this)">${us.map(u=>`<option value="${esc(u.key)}" ${u.key==def?"selected":""}>${esc(u.quant||u.key)} · ${u.gb} GB → ${u.nodes?u.nodes+"×":"beyond"}${eng(u)}</option>`).join("")}</select>`:(us[0]&&us[0].recipe_key?`<span class="chip rcp">${esc(m.recipe.label)} recipe · ${us[0].gb} GB → ${us[0].nodes}×</span>`:`<span class="chip ${TC(us[0]&&us[0].nodes)}">${esc((us[0]||{}).quant||"whole folder")} · ${(us[0]||{}).gb} GB${eng(us[0]||{})}</span>`);
  const kits=(m.kits||[]).map(k=>`<span class="chip" title="${esc(k.source||"")}">kit: ${esc(k.repo)}</span>`).join(" ");
  return `<tr data-id="${esc(m.id)}"><td><b>${esc(m.model)}</b> <span class=dim>${esc(m.variant)}</span><div class=row style="gap:4px;margin-top:3px"><span class="dim">${esc(m.maker)}</span>${m.new?'<span class="chip new">NEW</span>':""}${m.local?'<span class="chip loc">on this box</span>':""}${m.partial?'<span class="chip warnc">partial copy</span>':""}${m.status!="complete"?`<span class="chip warnc">${esc(m.status)}</span>`:""}${m.recipe?`<span class="chip rcp" title="${esc((m.recipe.license||"")+(m.recipe.repo?" · "+m.recipe.repo:""))}">recipe: ${esc(m.recipe.label)} · needs ${m.recipe.need_gib} GiB${m.recipe.requires_ollama_stopped?" · Ollama off":""}</span>`:""}${kits}</div></td>
- <td><span class=chip>${esc(m.category)}</span> <span class=dim>${esc(m.format)}${m.quant?" · "+esc(m.quant):""}</span></td><td style="white-space:nowrap">${m.size_gb} GB</td><td>${sel}${!m.units_exact?'<div class=why>per-quant sizes after the next sync</div>':""}</td>
- <td class=st>${status(m,def)}</td><td><button class=ins ${p.refuse||D.job.running?"disabled":""} onclick="insert(this)">INSERT</button></td></tr>`;}
+ <td>${formCell(m)}</td><td style="white-space:nowrap">${m.size_gb} GB</td><td>${sel}${!m.units_exact?'<div class=why>per-quant sizes after the next sync</div>':""}</td>
+ <td class=st>${["app","pending","nodes"].includes((m.fit||{}).class)?`<div class=why>${esc(m.fit.why)}</div>`:status(m,def)}</td><td class=act>${action(m,def)}</td></tr>`;}
 function draw(){if(!D)return;hdr();tape();slots();
  $("job").innerHTML=D.job.running?`<div class=job>⏳ ${esc(D.job.what)} — ${esc(D.job.progress||"working…")}</div>`:"";
- const q=$("q").value.toLowerCase(),cat=$("cat").value,fmt=$("fmt").value,tier=$("tier").value,nw=$("onlynew").checked,ok=$("onlyok").checked;
- const rows=D.shelf.filter(m=>(!q||(m.id+" "+m.category).toLowerCase().includes(q))&&(!cat||m.category==cat)&&(!fmt||m.format==fmt)&&(tier===""||String(m.tier||0)==tier)&&(!nw||m.new)&&(!ok||Object.values(m.plans).some(p=>!p.refuse)));
+ const q=$("q").value.toLowerCase(),fmt=$("fmt").value,nw=$("onlynew").checked;
+ const base=D.shelf.filter(m=>(!q||(m.id+" "+m.category+" "+(m.function_label||"")).toLowerCase().includes(q))&&(!fmt||(fmt=="other"?!["gguf","safetensors"].includes(m.format):m.format==fmt))&&(!nw||m.new));
+ const fns=(D.functions||[]).filter(f=>f.n);if(FN!="all"&&!fns.some(f=>f.key==FN))FN="all";
+ $("fns").innerHTML=`<button class="tab ${FN=="all"?"on":""}" onclick="setFn('all')">All<b>${D.shelf.length}</b></button>`+fns.map(f=>`<button class="tab ${FN==f.key?"on":""}" onclick="setFn('${f.key}')">${esc(f.label)}<b>${f.n}</b></button>`).join("");
+ const inFn=base.filter(m=>FN=="all"||m.function==FN),FL=D.fit_label||{},FO=D.fit_order||[];
+ $("fits").innerHTML=FO.map(c=>{const n=inFn.filter(m=>m.fit.class==c).length;return n?`<span class="chip fchip f-${c} ${FITOFF.has(c)?"off":""}" onclick="togFit('${c}')" title="${esc(FDESC[c])} — click to hide/show">${esc(FL[c]||c)} ${n}</span>`:"";}).join("");
+ const rows=inFn.filter(m=>!FITOFF.has(m.fit.class));
  $("n").textContent=`${rows.length} of ${D.shelf.length} shown`;
- const groups={};rows.forEach(m=>(groups[m.tier||0]=groups[m.tier||0]||[]).push(m));
- $("secs").innerHTML=Object.keys(groups).sort((a,b)=>(+a||99)-(+b||99)).map(k=>{const shut=SHUT.has(k);return `<section><h2 onclick="tog('${k}')"><span class="chip ${TC(+k)}">${TN(+k)}</span><span class=dim>${groups[k].length} model${groups[k].length>1?"s":""} ${shut?"▸":"▾"}</span></h2>${shut?"":`<div class=tw><table><tr><th>model</th><th>kind</th><th>size</th><th>unit → nodes</th><th>if you insert it now</th><th></th></tr>${groups[k].map(rowHtml).join("")}</table></div>`}</section>`;}).join("")||`<div class=dim style="margin:12px 0">nothing matches</div>`;
+ $("secs").innerHTML=fns.filter(f=>FN=="all"||f.key==FN).map(f=>{const fr=rows.filter(m=>m.function==f.key);if(!fr.length)return "";const shut=SHUT.has(f.key);
+  const mini=FO.map(c=>{const n=fr.filter(m=>m.fit.class==c).length;return n?`<span class="chip f-${c}">${esc(FL[c]||c)} ${n}</span>`:"";}).join(" ");
+  return `<section><h2 onclick="tog('${f.key}')"><span>${esc(f.label).toUpperCase()}</span><span class=dim>${fr.length} ${shut?"▸":"▾"}</span> ${mini}</h2>${shut?"":FO.map(c=>{const g=fr.filter(m=>m.fit.class==c);if(!g.length)return "";
+   const stops=c=="switch"?[...new Set(g.flatMap(m=>m.fit.stops||[]))]:[];
+   return `<div class="sub"><span class="chip f-${c}">● ${esc(FL[c]||c).toUpperCase()}</span><span class=why>${esc(FDESC[c])}${stops.length?" · stops: "+stops.map(esc).join(", "):""}</span></div><div class=tw><table><tr><th>model</th><th>form</th><th>size</th><th>unit → nodes</th><th>if you play it now</th><th></th></tr>${g.map(rowHtml).join("")}</table></div>`;}).join("")}</section>`;}).join("")||`<div class=dim style="margin:12px 0">nothing matches</div>`;
  $("locals").innerHTML=(D.local||[]).length?`<div class=tw><table><tr><th>local copy</th><th>size</th><th>tier</th><th></th></tr>${D.local.map(l=>`<tr><td>${esc(l.id)} ${l.complete?"":'<span class="chip warnc">partial</span>'}<div class=why>${(l.units||[]).map(esc).join(", ")}</div></td><td>${l.gb} GB</td><td>${tchip(l.tier)}</td><td><button class=warn data-id="${esc(l.id)}" onclick="del(this.dataset.id)">delete local copy</button></td></tr>`).join("")}</table></div>`:`<div class=dim>no local copies</div>`;
  const f=D.fit;$("fit").innerHTML=`Fit estimate: ${esc(f.rule)}. A floor, not a promise: tensor parallel splits weights, not activations or KV cache. GGUF cassettes run at ${f.num_ctx} context. · deck v${esc(D.version)}`;}
 function tog(k){SHUT.has(k)?SHUT.delete(k):SHUT.add(k);draw();}
 async function insert(btn,confirm){const tr=btn.closest("tr"),m=D.shelf.find(x=>x.id==tr.dataset.id),sel=tr.querySelector("select");const unit=sel?sel.value:(m.units[0]||{}).key;
- if(!confirm&&!window.confirm(`INSERT ${m.id}\n${unit}\n\nCopy it from the NAS to this box and start it?`))return;
+ if(!confirm&&!window.confirm(`PLAY ${m.id}\n${unit}\n\nCopy it from the NAS to this box and start it?`))return;
  const [s,r]=await api("/api/deck/insert",{id:m.id,unit,confirm_evict:confirm||[]});
  if(s==409&&r.would_evict){openDlg(r,()=>insert(btn,r.would_evict));return;}
  if(r.error)alert(r.error);load(0);}

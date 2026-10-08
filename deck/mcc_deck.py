@@ -28,7 +28,7 @@ import argparse, glob, hmac, json, os, re, secrets, shlex, shutil, subprocess, s
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 HOME = os.path.expanduser("~")
 
 DEFAULTS = {
@@ -55,6 +55,20 @@ DEFAULTS = {
                "trust_remote_code": False, "extra_args": [], "container": "mcc-sglang"},
     "recipes_file": "~/.config/mcc/recipes.json",       # recipe lanes (e.g. TensorFold): {library id: {label, start, stop, port, need_gib, …}}
     "new_days": 7,
+    # FORM · FIT · FUNCTION (v1.2): the shelf is sectioned by what a model DOES (function), ordered inside each section by whether it runs
+    # here now (fit), and every row shows what it physically is (form). Categories not listed land in "Other".
+    "functions": [
+        {"key": "chat", "label": "Chat & reasoning", "categories": ["LLMs"]},
+        {"key": "coding", "label": "Coding", "categories": ["Coding"]},
+        {"key": "ondevice", "label": "Small & on-device", "categories": ["Small-On-Device"]},
+        {"key": "image", "label": "Image", "categories": ["Image"]},
+        {"key": "video", "label": "Video", "categories": ["Video"]},
+        {"key": "audio", "label": "Music & audio", "categories": ["Music-Audio"]},
+        {"key": "speech", "label": "Speech", "categories": ["Speech-TTS", "Speech-ASR"]},
+        {"key": "ocr", "label": "Documents & OCR", "categories": ["OCR"]},
+        {"key": "embed", "label": "Embeddings & search", "categories": ["Embeddings-Reranking"]},
+    ],
+    "apps": {},                                         # function key -> {"label": "ComfyUI", "url": "http://127.0.0.1:8188"}: an OPEN button for models the deck does not serve
 }
 ENGINE_LABEL = {"vllm": "vLLM", "sglang": "SGLang"}
 RECIPE_DEFAULTS = {"nodes": 1, "health_path": "/health", "requires_ollama_stopped": False, "start_timeout_s": 1800, "stop_timeout_s": 180,
@@ -213,6 +227,41 @@ def plan_insert(m, unit, res, cfg, busy=False, recipe=None):
     if got < need:
         return {"refuse": f"does not fit: needs ~{need:.0f} GiB at {cfg['num_ctx']} ctx, ~{max(free, 0):.0f} GiB free after the protected reserve"}
     return {"path": "ollama", "would_evict": ev, "need_gib": round(need, 1), "free_gib": round(free, 1)}
+
+
+FIT_ORDER = ["ready", "switch", "blocked", "nodes", "app", "pending"]
+FIT_LABEL = {"ready": "Ready now", "switch": "After a switch", "blocked": "Blocked right now", "nodes": "Needs more nodes",
+             "app": "Runs in its own app", "pending": "Not on the shelf yet"}
+
+
+def function_of(category, cfg):
+    """-> (key, label) of the function section a NAS category belongs to; unknown categories land in Other."""
+    for f in cfg.get("functions") or []:
+        if category in (f.get("categories") or []): return f["key"], f.get("label") or f["key"]
+    return "other", "Other"
+
+
+def fit_of(m, units, plans, cfg):
+    """FIT = can it run here, now? One class per row, from the plans the guard already made (never a new decision):
+    ready (a unit fits beside what is running) · switch (a unit fits if the named models stop — fewest stops wins) · blocked (single-node
+    but refused right now; the reason is the guard's) · nodes (needs more nodes than one) · app (a category the deck does not serve) ·
+    pending (not complete on the NAS)."""
+    if m.get("status") != "complete": return {"class": "pending", "why": f"not complete on the NAS ({m.get('status') or '?'})"}
+    fk, _ = function_of(m.get("category"), cfg)
+    if m.get("category") not in cfg["servable_categories"]:
+        app = (cfg.get("apps") or {}).get(fk)
+        return {"class": "app", "why": f"runs in {app.get('label')}" if app else "runs in its own app — the deck serves text models", **({"app": app} if app else {})}
+    ok = [u for u in units if not (plans.get(u["key"]) or {}).get("refuse")]
+    ready = [u for u in ok if not plans[u["key"]].get("would_evict")]
+    if ready: return {"class": "ready", "unit": ready[0]["key"], "why": "fits beside what is running"}
+    if ok:
+        u = min(ok, key=lambda x: len(plans[x["key"]]["would_evict"]))
+        return {"class": "switch", "unit": u["key"], "stops": plans[u["key"]]["would_evict"], "why": "stops " + ", ".join(plans[u["key"]]["would_evict"])}
+    one = [u for u in units if u.get("nodes") == 1]
+    if not one:
+        ks = [u["nodes"] for u in units if u.get("nodes")]
+        return {"class": "nodes", "why": f"needs {min(ks)} nodes" if ks else f"beyond the fleet (more than {cfg['fit']['max_nodes']} nodes)"}
+    return {"class": "blocked", "unit": one[0]["key"], "why": (plans.get(one[0]["key"]) or {}).get("refuse") or "refused"}
 
 
 # ── the machine: everything that touches the box, the NAS or a runtime ─────────────────────────────────────────────
@@ -480,7 +529,10 @@ class Deck:
                         "plans": {u["key"]: plan_insert(m, u, res, self.cfg, self.job["running"], rcp.get(u.get("recipe_key"))) for u in us},
                         **({"recipe": {k: rcp[mid].get(k) for k in ("label", "engine", "need_gib", "license", "repo", "requires_ollama_stopped")}} if mid in rcp else {}),
                         **self.local_state(mid, us)})
-        return sorted(out, key=lambda r: (r["tier"] or 9, not r["servable"], (r["maker"] or "").lower(), (r["model"] or "").lower(), r["variant"] or "")), d
+            r = out[-1]; r["function"], r["function_label"] = function_of(r["category"], self.cfg); r["fit"] = fit_of(m, us, r["plans"], self.cfg)
+        fo = [f["key"] for f in self.cfg.get("functions") or []] + ["other"]
+        return sorted(out, key=lambda r: (fo.index(r["function"]) if r["function"] in fo else 99, FIT_ORDER.index(r["fit"]["class"]), r["tier"] or 9,
+                                          (r["maker"] or "").lower(), (r["model"] or "").lower(), r["variant"] or "")), d
 
     def local_cassettes(self, rows):
         ids = {r["id"]: r for r in rows}; out = []; L = self.cfg["local_dir"]
@@ -521,6 +573,10 @@ class Deck:
                 "n_new": sum(1 for r in rows if r["new"]), "slots": slots, "online_nodes": sum(1 for s in slots if s.get("online")),
                 "protected": self.cfg["protected"], "residents": res, "job": dict(self.job), "playing": _rjson(self.PLAYING, {}),
                 "local": self.local_cassettes(rows), "history": hist, "new_days": self.cfg["new_days"], "engines": self.cfg["engines"],
+                "functions": [{"key": k, "label": lab, "n": sum(1 for r in rows if r["function"] == k),
+                               "fit": {c: sum(1 for r in rows if r["function"] == k and r["fit"]["class"] == c) for c in FIT_ORDER}}
+                              for k, lab in [(f["key"], f.get("label") or f["key"]) for f in self.cfg.get("functions") or []] + [("other", "Other")]],
+                "fit_order": FIT_ORDER, "fit_label": FIT_LABEL,
                 "fit": {**f, "num_ctx": self.cfg["num_ctx"],
                         "rule": f"smallest k with max(W + {f['rank_overhead_gib']}·k + {f['kv_floor_gib']}, {f['weight_factor']}·W) ≤ {f['gpu_budget_gib']}·k  (W = unit weights, GiB)"}}
 
@@ -834,7 +890,9 @@ def main(argv=None):
         root = tempfile.mkdtemp(prefix="mcc-demo-")
         cfg.update(state_dir=f"{root}/state", local_dir=f"{root}/deck", protected=["qwen3:14b"],
                    fleet=[{"name": "node-1", "self": True, "note": "this box"}, {"name": "node-2", "ssh": "demo", "note": "peer"},
-                          {"name": "node-3", "note": "planned"}, {"name": "node-4", "note": "planned"}])
+                          {"name": "node-3", "note": "planned"}, {"name": "node-4", "note": "planned"}],
+                   apps={"image": {"label": "ComfyUI", "url": "#comfyui"}, "video": {"label": "ComfyUI", "url": "#comfyui"},
+                         "speech": {"label": "the speech service", "url": "#speech"}})
         cfg["_recipes"] = {k: {**RECIPE_DEFAULTS, **v, "key": k} for k, v in DEMO_RECIPES.items()}
         demo_seed(cfg); deck = Deck(cfg, DemoSystem(cfg, ollama_up=not a.demo_no_ollama))
     else: deck = Deck(cfg)
