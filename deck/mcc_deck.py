@@ -29,7 +29,7 @@ import argparse, collections, glob, hmac, json, os, re, secrets, shlex, shutil, 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-VERSION = "1.3.0"
+VERSION = "1.3.1"
 HOME = os.path.expanduser("~")
 
 DEFAULTS = {
@@ -348,6 +348,17 @@ BENCH_DECODE = "Write a long, detailed story about a lighthouse keeper who finds
 BENCH_FILL = "The deck copies a model from the shelf, starts it, and measures how fast it reads and writes. "   # ≈ 20 tokens
 
 
+def expires_left(ts, now=None):
+    """Ollama's expires_at ("2026-10-09T13:05:12.123456789-07:00", nanoseconds, or Z) -> seconds left; None if unreadable"""
+    import calendar
+    m = re.match(r"^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)(?:\.\d+)?(Z|[+-]\d\d:\d\d)$", str(ts or ""))
+    if not m: return None
+    y, mo, d, h, mi, se = (int(x) for x in m.groups()[:6]); tz = m.group(7)
+    off = 0 if tz == "Z" else (1 if tz[0] == "+" else -1) * (int(tz[1:3]) * 3600 + int(tz[4:6]) * 60)
+    try: return calendar.timegm((y, mo, d, h, mi, se, 0, 0, 0)) - off - (time.time() if now is None else now)
+    except (OverflowError, ValueError): return None
+
+
 def bench_prompt(kind, nonce):
     """decode: a short prompt, 256 tokens out · prefill: ≈ 2,000 tokens in, 1 out. The nonce defeats prefix / prompt caches."""
     return f"[{nonce}] " + (BENCH_DECODE if kind == "decode" else BENCH_FILL * 100 + "\nSay OK.")
@@ -432,9 +443,14 @@ class System:
         return {"tok_s": round(n / (t1 - t0), 1), "tokens": n, "secs": round(t1 - t0, 2)}
 
     def bench_ollama(self, name, kind):
-        """Ollama times itself: eval_count / eval_duration (decode), prompt_eval_count / prompt_eval_duration (prefill)"""
+        """Ollama times itself: eval_count / eval_duration (decode), prompt_eval_count / prompt_eval_duration (prefill).
+        Never disturbs the resident: NO num_ctx (a different context reloads it) and keep_alive = its CURRENT remaining expiry
+        (a model pinned with keep_alive -1 stays pinned; the default would unload it after 5 minutes)."""
+        left = next((expires_left(m.get("expires_at")) for m in ((self.ollama("/api/ps") or {}).get("models") or []) if m.get("name") == name), None)
+        if left is None: raise RuntimeError(f"{name} is not resident in Ollama (or its expiry is unreadable) — refusing rather than changing its keep_alive")
         r = self.ollama("/api/generate", {"model": name, "prompt": bench_prompt(kind, secrets.token_hex(4)), "stream": False,
-                                          "options": {"num_predict": 256 if kind == "decode" else 1, "temperature": 0, "num_ctx": self.cfg["num_ctx"]}}, timeout=600)
+                                          "keep_alive": -1 if left > 3e7 else f"{max(60, int(left))}s",
+                                          "options": {"num_predict": 256 if kind == "decode" else 1, "temperature": 0}}, timeout=600)
         if not r: raise RuntimeError("Ollama did not answer")
         c, d = (r.get("eval_count"), r.get("eval_duration")) if kind == "decode" else (r.get("prompt_eval_count"), r.get("prompt_eval_duration"))
         if not c or not d: raise RuntimeError("Ollama returned no timings")

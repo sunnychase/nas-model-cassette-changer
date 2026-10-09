@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.1
+- **Fix: the Ollama benchmark no longer disturbs the model it measures.** 1.3.0 sent `num_ctx` (a different context makes Ollama reload the
+  model) and no `keep_alive` (so a model pinned with `keep_alive: -1` fell back to the 5-minute default and could unload). It now sends no
+  `num_ctx` and passes the resident's current remaining expiry as `keep_alive`; a model that is not resident is refused. 55 tests.
+
 ## 1.3.0 — the cassette selector
 - **ENGINE selector bar** at the top: All · Ollama · vLLM · SGLang · each recipe lane (e.g. TensorFold) · EXL3 · Apps, each with a model count
   and a status dot (playing / Ollama stopped / idle / not playable from the deck). Picking one filters the shelf, the function tabs and the fit

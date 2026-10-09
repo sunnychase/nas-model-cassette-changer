@@ -334,6 +334,22 @@ class Benchmarks(unittest.TestCase):
         for i in range(2, 40): D.bump_peak(pk, f"2026-10-{i:02d}", "prefill", i)
         self.assertEqual(len(pk), 30); self.assertNotIn("2026-10-01", pk)
 
+    def test_expires_left_parses_ollama_timestamps(self):
+        self.assertEqual(D.expires_left("2026-10-09T13:05:12.123456789-07:00", now=1791576312), 0)
+        self.assertEqual(D.expires_left("2026-10-09T20:05:12Z", now=1791576312 - 60), 60)
+        self.assertGreater(D.expires_left("2318-01-01T00:00:00.5-08:00"), 3e7)                    # keep_alive -1 = pinned
+        for bad in (None, "", "soon", "2026-10-09 13:05:12"): self.assertIsNone(D.expires_left(bad))
+
+    def test_ollama_bench_never_reloads_or_unpins(self):
+        sent = []; c = cfg(); s = D.System(c)
+        def fake(path, body=None, timeout=4):
+            if path == "/api/ps": return {"models": [{"name": "qwen3:14b", "expires_at": "2318-01-01T00:00:00-08:00"}]}
+            sent.append(body); return {"eval_count": 256, "eval_duration": 4e9, "total_duration": 5e9}
+        s.ollama = fake
+        self.assertEqual(s.bench_ollama("qwen3:14b", "decode")["tok_s"], 64.0)
+        self.assertEqual(sent[0]["keep_alive"], -1); self.assertNotIn("num_ctx", sent[0]["options"])
+        self.assertRaises(RuntimeError, s.bench_ollama, "not-resident:1b", "decode"); self.assertEqual(len(sent), 1)
+
     def test_bench_prompts_defeat_caches(self):
         self.assertNotEqual(D.bench_prompt("prefill", "a"), D.bench_prompt("prefill", "b"))
         self.assertGreater(len(D.bench_prompt("prefill", "a").split()), 1500)
