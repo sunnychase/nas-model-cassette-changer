@@ -67,5 +67,13 @@ class Index(unittest.TestCase):
         self.assertIn("apache-2.0", txt2); self.assertIn("my tuning notes", txt2)
 
 
+    def test_architectures_recorded(self):
+        d = tempfile.mkdtemp()
+        self.assertIsNone(I.archs_of(d))                                                             # no config.json
+        touch(f"{d}/config.json", text="{not json"); self.assertEqual(I.archs_of(d), "ERR")
+        touch(f"{d}/config.json", text=json.dumps({"architectures": ["Qwen3ForCausalLM"]})); self.assertEqual(I.archs_of(d), ["Qwen3ForCausalLM"])
+        touch(f"{d}/config.json", text=json.dumps({"torch_dtype": "bfloat16"})); self.assertEqual(I.archs_of(d), [])
+
+
 if __name__ == "__main__":
     unittest.main()

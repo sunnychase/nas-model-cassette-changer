@@ -119,6 +119,17 @@ def quant_of(d, files, fmt):
     return q
 
 
+def archs_of(d):
+    """config.json "architectures" at the model's root: a list ([] = declares none), None = no config.json, "ERR" = unreadable.
+    The deck's ARCHITECTURE CHECK refuses all but a list that its engine image can load."""
+    p = os.path.join(d, "config.json")
+    if not os.path.exists(p): return None
+    try:
+        with open(p) as f: a = json.load(f).get("architectures") or []
+        return [str(x) for x in a] if isinstance(a, list) else "ERR"
+    except Exception: return "ERR"
+
+
 def runtime_of(fmt, q, category):
     if fmt == "gguf":
         return ["llama.cpp", "ollama"] if CAT_TASK.get(category, "text-generation") == "text-generation" else ["llama.cpp", "ComfyUI-GGUF"]
@@ -215,7 +226,8 @@ def scan(cfg):
             records.append({"id": f"{maker}/{model}/{var}", "maker": maker, "model": model, "variant": var, "publisher": org,
                             "category": cat, "format": fmt, "quant": q, "runtime": runtime_of(fmt, q, cat), "size_bytes": size,
                             "n_weight_files": len(files), "status": status_of(cur, files), "path": os.path.relpath(cur, data),
-                            "source": src, "nodes_est": nodes_needed(size / 1e9, cfg), "updated": time.strftime("%Y-%m-%dT%H:%M:%S")})
+                            "source": src, "nodes_est": nodes_needed(size / 1e9, cfg), "architectures": archs_of(cur),
+                            "updated": time.strftime("%Y-%m-%dT%H:%M:%S")})
     seen, out = set(), []
     for r in records:                                    # two staging folders resolving to the same id: keep the first, suffix the rest
         i, n = r["id"], 2

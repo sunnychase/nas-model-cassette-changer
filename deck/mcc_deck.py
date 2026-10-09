@@ -23,12 +23,13 @@ Usage:
   mcc_deck.py sync   [--config FILE]          # what the timer runs
   mcc_deck.py summary [--config FILE]
   mcc_deck.py fit GB                          # how many nodes a GB-sized unit needs under your config
+  mcc_deck.py archs vllm|sglang [--config FILE]   # read the architectures the engine image can load (for the ARCHITECTURE CHECK)
 """
 import argparse, glob, hmac, json, os, re, secrets, shlex, shutil, subprocess, sys, threading, time, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 HOME = os.path.expanduser("~")
 
 DEFAULTS = {
@@ -69,8 +70,14 @@ DEFAULTS = {
         {"key": "embed", "label": "Embeddings & search", "categories": ["Embeddings-Reranking"]},
     ],
     "apps": {},                                         # function key -> {"label": "ComfyUI", "url": "http://127.0.0.1:8188"}: an OPEN button for models the deck does not serve
+    # v1.3 ARCHITECTURE CHECK: per engine, a JSON file listing the architectures its image can load ({"image", "read", "architectures": [...]}),
+    # written by `mcc_deck.py archs vllm` / `archs sglang`. A missing file = no check for that engine (the 1.2 behaviour).
+    "engine_archs": {"vllm": "~/.config/mcc/vllm_archs.json", "sglang": "~/.config/mcc/sglang_archs.json"},
 }
 ENGINE_LABEL = {"vllm": "vLLM", "sglang": "SGLang"}
+ARCH_PROBE = {   # prints one architecture per line from inside the engine's own image
+    "vllm": ["python3", "-c", "from vllm import ModelRegistry\nfor a in sorted(ModelRegistry.get_supported_archs()): print(a)"],
+    "sglang": ["python3", "-c", "from sglang.srt.models.registry import ModelRegistry\nfor a in sorted(ModelRegistry.models): print(a)"]}
 RECIPE_DEFAULTS = {"nodes": 1, "health_path": "/health", "requires_ollama_stopped": False, "start_timeout_s": 1800, "stop_timeout_s": 180,
                    "copy": True}                      # copy: false = the recipe keeps its own weights (e.g. TensorFold's HF cache); INSERT only starts it
 RUNNING = {"active", "activating", "reloading"}
@@ -86,6 +93,7 @@ def load_config(path):
             if isinstance(v, dict) and isinstance(cfg.get(k), dict): cfg[k].update(v)
             else: cfg[k] = v
     for k in ("local_dir", "state_dir", "token_file", "recipes_file"): cfg[k] = os.path.expanduser(cfg[k])
+    cfg["engine_archs"] = {e: os.path.expanduser(p) for e, p in (cfg.get("engine_archs") or {}).items() if p}
     return cfg
 
 
@@ -192,6 +200,9 @@ def plan_insert(m, unit, res, cfg, busy=False, recipe=None):
     if fmt == "gguf" and not ({"ollama", "llama.cpp"} & set(rt)): return {"refuse": f"runtime {', '.join(rt) or '?'} — not an Ollama model"}
     if fmt == "safetensors" and eng not in rt: return {"refuse": f"runtime {', '.join(rt) or '?'} — not a {ENGINE_LABEL.get(eng, eng)} model"}
     if fmt == "safetensors" and eng not in cfg["engines"]: return {"refuse": f"{ENGINE_LABEL.get(eng, eng)} is not enabled in 'engines'"}
+    if fmt == "safetensors":
+        aw = arch_refusal(m, eng, (cfg.get("_archs") or {}).get(eng) if "_archs" in cfg else read_archs((cfg.get("engine_archs") or {}).get(eng)))
+        if aw: return {"refuse": aw}
     if m.get("status") != "complete": return {"refuse": f"not complete on the NAS ({m.get('status')})"}
     if k is None: return {"refuse": f"beyond the fleet (needs more than {cfg['fit']['max_nodes']} nodes by the estimate)"}
     if k > 1: return {"refuse": f"needs {k} nodes — multi-node serving is launched from its kit, not from the deck"}
@@ -227,6 +238,72 @@ def plan_insert(m, unit, res, cfg, busy=False, recipe=None):
     if got < need:
         return {"refuse": f"does not fit: needs ~{need:.0f} GiB at {cfg['num_ctx']} ctx, ~{max(free, 0):.0f} GiB free after the protected reserve"}
     return {"path": "ollama", "would_evict": ev, "need_gib": round(need, 1), "free_gib": round(free, 1)}
+
+
+def arch_refusal(m, engine, known):
+    """ARCHITECTURE CHECK (v1.3), before anything is copied or stopped. known = the architectures the engine's image can load (None = no
+    list for this engine: no check). m["architectures"] comes from the NAS index: absent = an index older than 1.3 (no check);
+    None = no config.json at the model's root; "ERR" = unreadable; [] = declares none. All but "absent" fail closed."""
+    if not known or "architectures" not in m: return None
+    a, lab = m["architectures"], ENGINE_LABEL.get(engine, engine)
+    if a is None: return f"no config.json at the model's root — {lab} needs one; refusing rather than copying it to find out"
+    if a == "ERR": return "its config.json could not be read on the NAS — refusing rather than guessing"
+    if not a: return f"its config.json declares no architecture — refusing rather than copying it to find out"
+    if not set(a) & set(known): return f"architecture {', '.join(a)} is not in this {lab} image — refused before anything is copied or stopped"
+    return None
+
+
+def read_archs(path):
+    """{"architectures": [...]} file -> set, or None when there is no usable list (= no check)"""
+    d = _rjson(path, None) if path else None
+    a = (d or {}).get("architectures") if isinstance(d, dict) else None
+    return set(a) if isinstance(a, list) and a else None
+
+
+SELECTOR_ORDER = ["Ollama", "vLLM", "SGLang", "EXL3", "Apps"]      # recipe lanes (by their label) go before EXL3
+
+
+def engines_of(row):
+    """the engines that can play a shelf row — what the ENGINE selector filters on (a safetensors model may list vLLM and SGLang)"""
+    if row.get("recipe"): return [row["recipe"].get("label") or "recipe"]
+    if (row.get("fit") or {}).get("class") == "app" or not row.get("servable"): return ["Apps"]
+    if str(row.get("quant") or "").upper().startswith("EXL") or {"exllama", "tabbyapi"} & {str(x).lower() for x in row.get("runtime") or []}: return ["EXL3"]
+    if (row.get("format") or "").lower() == "gguf": return ["Ollama"]
+    e = [ENGINE_LABEL.get(u.get("engine"), u.get("engine")) for u in row.get("units") or [] if u.get("engine")]
+    return list(dict.fromkeys(e)) or ["vLLM"]
+
+
+def engine_bar(rows, res, playing):
+    """the ENGINE selector: one entry per engine that has models, with a count and a state dot.
+    state: serving (it is playing now) · stopped (Ollama not running) · idle · unwired (listed, the deck cannot play it)"""
+    n = {}
+    for r in rows:
+        for e in engines_of(r): n[e] = n.get(e, 0) + 1
+    run = {e.get("name") for e in res.get("engines_running") or []}
+    deck_oll = any(o["name"].startswith("deck/") for o in res.get("ollama") or [])
+    recipes = [e for e in n if e not in SELECTOR_ORDER]
+    out = []
+    for e in SELECTOR_ORDER[:3] + sorted(recipes) + SELECTOR_ORDER[3:]:
+        if not n.get(e): continue
+        if e == "Ollama":
+            st = ("stopped", "Ollama is not running") if not res.get("ollama_up", True) else \
+                 ("serving", "models loaded") if res.get("ollama") else ("idle", "running, nothing loaded")
+            if deck_oll: st = ("serving", "a deck cassette is playing in Ollama")
+        elif e == "EXL3": st = ("unwired", "listed so you can see them — the deck does not play EXL3 yet (it needs an exllamav3 / TabbyAPI player)")
+        elif e == "Apps": st = ("unwired", "image, video, speech … models run in their own apps")
+        else: st = ("serving", "playing now") if e in run else ("idle", "idle")
+        out.append({"key": e, "n": n[e], "state": st[0], "why": st[1]})
+    return out
+
+
+def last_fail(history, pull_log_tail=""):
+    """the newest failed INSERT that no later good INSERT superseded -> {id, unit, ts, rc, why}; else None"""
+    for a in reversed(history or []):
+        if a.get("action") != "INSERT": continue
+        if a.get("rc") in (0, None): return None
+        return {"id": a.get("id"), "unit": a.get("unit"), "ts": a.get("ts"), "rc": a.get("rc"),
+                "why": (a.get("note") or pull_log_tail or "see the deck log")[:300]}
+    return None
 
 
 FIT_ORDER = ["ready", "switch", "blocked", "nodes", "app", "pending"]
@@ -518,6 +595,7 @@ class Deck:
 
     def rows(self, res):
         ms, d = self.models(); ui = (_rjson(self.UNITS, {}) or {}).get("units"); seen = _rjson(self.SEEN, {}); rcp = self.recipes()
+        if "_archs_fixed" not in self.cfg: self.cfg["_archs"] = {e: read_archs(p) for e, p in (self.cfg.get("engine_archs") or {}).items()}
         cutoff = time.strftime("%Y-%m-%d", time.localtime(time.time() - self.cfg["new_days"] * 86400)); out = []
         for m in ms:
             mid = m.get("id"); us, exact = self.units_for(m, ui, rcp); ks = [u["nodes"] for u in us if u["nodes"]]
@@ -530,6 +608,7 @@ class Deck:
                         **({"recipe": {k: rcp[mid].get(k) for k in ("label", "engine", "need_gib", "license", "repo", "requires_ollama_stopped")}} if mid in rcp else {}),
                         **self.local_state(mid, us)})
             r = out[-1]; r["function"], r["function_label"] = function_of(r["category"], self.cfg); r["fit"] = fit_of(m, us, r["plans"], self.cfg)
+            r["runtime"] = m.get("runtime") or []; r["engines"] = engines_of(r)
         fo = [f["key"] for f in self.cfg.get("functions") or []] + ["other"]
         return sorted(out, key=lambda r: (fo.index(r["function"]) if r["function"] in fo else 99, FIT_ORDER.index(r["fit"]["class"]), r["tier"] or 9,
                                           (r["maker"] or "").lower(), (r["model"] or "").lower(), r["variant"] or "")), d
@@ -566,13 +645,19 @@ class Deck:
         tiers["beyond"] = sum(1 for r in rows if r["tier"] is None)
         hist = []
         if os.path.exists(self.ACTIONS):
-            with open(self.ACTIONS) as f: hist = [json.loads(l) for l in f if l.strip()][-12:]
+            with open(self.ACTIONS) as f: hist = [json.loads(l) for l in f if l.strip()][-40:]
+        tail = ""
+        try:
+            with open(self.PULL_LOG, errors="replace") as f: tail = next((l.strip() for l in reversed(f.read()[-4000:].splitlines()) if l.strip() and "%" not in l and not l.startswith("[done")), "")
+        except OSError: pass
+        lf = last_fail(hist, tail); playing = _rjson(self.PLAYING, {})
         f = self.cfg["fit"]
         return {"version": VERSION, "asof": time.strftime("%Y-%m-%dT%H:%M:%S"), "library_built": d.get("built") if isinstance(d, dict) else None,
                 "nas": _rjson(self.NAS, {}), "syncing": self.syncing, "n_shelf": len(rows), "shelf": rows, "tiers": tiers, "max_nodes": mx,
                 "n_new": sum(1 for r in rows if r["new"]), "slots": slots, "online_nodes": sum(1 for s in slots if s.get("online")),
-                "protected": self.cfg["protected"], "residents": res, "job": dict(self.job), "playing": _rjson(self.PLAYING, {}),
-                "local": self.local_cassettes(rows), "history": hist, "new_days": self.cfg["new_days"], "engines": self.cfg["engines"],
+                "protected": self.cfg["protected"], "residents": res, "job": dict(self.job), "playing": playing,
+                "engine_bar": engine_bar(rows, res, playing), "last_fail": lf, "arch_check": sorted(e for e, a in (self.cfg.get("_archs") or {}).items() if a),
+                "local": self.local_cassettes(rows), "history": hist[-12:], "new_days": self.cfg["new_days"], "engines": self.cfg["engines"],
                 "functions": [{"key": k, "label": lab, "n": sum(1 for r in rows if r["function"] == k),
                                "fit": {c: sum(1 for r in rows if r["function"] == k and r["fit"]["class"] == c) for c in FIT_ORDER}}
                               for k, lab in [(f["key"], f.get("label") or f["key"]) for f in self.cfg.get("functions") or []] + [("other", "Other")]],
@@ -698,6 +783,8 @@ DEMO_SHELF = [  # (category, maker, model, variant, publisher, format, quant, GB
     ("LLMs", "DeepSeek", "DeepSeek-V3.1", "unsloth-GGUF", "unsloth", "gguf", "Q2_K_XL", 0, [("UD-TQ1_0", 170.0), ("UD-Q2_K_XL", 251.0)]),
     ("LLMs", "DeepSeek", "DeepSeek-R1-0528", "original", "deepseek-ai", "safetensors", "FP8", 688.0, None),
     ("LLMs", "Zhipu-GLM", "GLM-4.5-Air", "FP8", "zai-org", "safetensors", "FP8", 113.0, None),
+    ("LLMs", "Qwen", "Qwen3-32B", "turboderp-EXL3", "turboderp", "safetensors", "EXL3", 19.6, None),
+    ("LLMs", "Example", "Novel-Hybrid-9B", "original", "example-lab", "safetensors", "BF16", 18.4, None),
     ("LLMs", "Zhipu-GLM", "GLM-4.5-Air", "unsloth-GGUF", "unsloth", "gguf", "Q4_K_M", 0, [("Q4_K_M", 72.9)]),
     ("LLMs", "Microsoft", "Phi-4", "original", "microsoft", "safetensors", "BF16", 29.3, None),
     ("Small-On-Device", "HuggingFace", "SmolLM3-3B", "original", "HuggingFaceTB", "safetensors", "BF16", 6.2, None),
@@ -774,6 +861,11 @@ class DemoSystem(System):
     def ollama_rm(self, name): self.tags.pop(name, None)
 
 
+DEMO_ARCH = {"Qwen": "Qwen3ForCausalLM", "OpenAI": "GptOssForCausalLM", "Google": "Gemma3ForConditionalGeneration", "Meta": "LlamaForCausalLM",
+             "Mistral": "MistralForCausalLM", "DeepSeek": "DeepseekV3ForCausalLM", "Zhipu-GLM": "Glm4MoeForCausalLM", "Microsoft": "Phi3ForCausalLM",
+             "HuggingFace": "SmolLM3ForCausalLM", "Example": "NovelHybridForCausalLM"}
+DEMO_ENGINE_ARCHS = sorted(set(DEMO_ARCH.values()) - {"NovelHybridForCausalLM"} | {"Qwen3MoeForCausalLM", "Llama4ForConditionalGeneration"})
+
 DEMO_RECIPES = {"Qwen/Qwen3.8-Flash-Next/Vontra-MLX-4bit-MTP": {
     "label": "TensorFold", "engine": "tensorfold", "served": "Qwen3.8-Flash-Next", "quant": "MLX 4-bit + MTP", "nodes": 1, "need_gib": 112, "port": 8888,
     "health_path": "/health", "requires_ollama_stopped": True, "copy": False, "start": "~/recipes/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold/start.sh",
@@ -787,9 +879,12 @@ def demo_seed(cfg):
     s = cfg["state_dir"]; os.makedirs(s, exist_ok=True); models, units = [], {}; now = time.strftime("%Y-%m-%d")
     for cat, maker, model, var, pub, fmt, q, gb, quants in DEMO_SHELF:
         mid = f"{maker}/{model}/{var}"; size = int((sum(x[1] for x in quants) if quants else gb) * 1e9)
-        rt = ["llama.cpp", "ollama"] if fmt == "gguf" else (["vllm", "sglang", "transformers"] if cat in ("LLMs", "Coding", "Small-On-Device") else ["diffusers", "transformers"])
+        rt = ["llama.cpp", "ollama"] if fmt == "gguf" else ["exllama", "tabbyAPI"] if (q or "").startswith("EXL") else \
+            (["vllm", "sglang", "transformers"] if cat in ("LLMs", "Coding", "Small-On-Device") else ["diffusers", "transformers"])
         models.append({"id": mid, "maker": maker, "model": model, "variant": var, "publisher": pub, "category": cat, "format": fmt, "quant": q,
                        "runtime": rt, "size_bytes": size, "status": "complete", "source": f"https://huggingface.co/{pub}/{model}"})
+        if fmt == "safetensors" and cat in ("LLMs", "Coding", "Small-On-Device") and mid not in DEMO_RECIPES:
+            models[-1]["architectures"] = [{"Llama-4-Scout-17B-16E": "Llama4ForConditionalGeneration", "Qwen3-30B-A3B": "Qwen3MoeForCausalLM"}.get(model, DEMO_ARCH.get(maker, "UnknownForCausalLM"))]
         if quants:
             units[mid] = [{"key": f"{model}-{qq}", "quant": qq, "files": [f"{model}-{qq}.gguf"], "bytes": int(g * 1e9)} for qq, g in quants]
     models[-1]["status"] = "downloading"
@@ -804,7 +899,9 @@ def demo_seed(cfg):
         with open(f"{p}/.deck-complete-{_slug(key)}", "w") as mf: mf.write("demo")
         with open(f"{p}/{key}.gguf", "wb") as wf: wf.truncate(int(gb * 1e9))          # sparse: shows the size, uses no disk
     hist = [{"action": "INSERT", "id": "Mistral/Devstral-Small-2507/unsloth-GGUF", "unit": "Devstral-Small-2507-Q4_K_M", "nodes": 1, "rc": 0, "evicted": [], "secs": 31, "ts": f"{now}T09:12:40"},
-            {"action": "EJECT", "id": "Mistral/Devstral-Small-2507/unsloth-GGUF", "remove_local": False, "done": ["unloaded deck/mistral_devstral-small-2507"], "ts": f"{now}T11:03:02"}]
+            {"action": "EJECT", "id": "Mistral/Devstral-Small-2507/unsloth-GGUF", "remove_local": False, "done": ["unloaded deck/mistral_devstral-small-2507"], "ts": f"{now}T11:03:02"},
+            {"action": "INSERT", "id": "Mistral/Mistral-Small-3.2-24B/original", "unit": "(whole variant)", "nodes": 1, "rc": 1, "evicted": ["qwen3:14b"], "secs": 212, "ts": f"{now}T11:20:15",
+             "note": "vLLM exited while loading: CUDA out of memory (max_model_len 32768 is too long for the memory left) — try a smaller max_model_len"}]
     with open(f"{s}/actions.jsonl", "w") as f: f.write("".join(json.dumps(h) + "\n" for h in hist))
 
 
@@ -868,6 +965,19 @@ def make_handler(deck, token, page):
     return H
 
 
+def probe_archs(cfg, engine):
+    """run the engine's own image once and record what it can load -> cfg["engine_archs"][engine]. Re-run after pulling a new image."""
+    if engine not in ARCH_PROBE: return 2, f"unknown engine {engine} (vllm or sglang)"
+    image = cfg[engine]["image"]; out_p = (cfg.get("engine_archs") or {}).get(engine)
+    if not out_p: return 2, f"engine_archs.{engine} is not set in the config"
+    r = subprocess.run(["docker", "run", "--rm", "--entrypoint", ARCH_PROBE[engine][0], image] + ARCH_PROBE[engine][1:],
+                       capture_output=True, text=True, timeout=600)
+    archs = sorted({l.strip() for l in r.stdout.splitlines() if re.fullmatch(r"[A-Za-z0-9_]+", l.strip() or "-")})
+    if r.returncode or not archs: return 1, f"could not read the architectures from {image} (rc={r.returncode}): {r.stderr.strip()[-300:]}"
+    _wjson(out_p, {"engine": engine, "image": image, "read": time.strftime("%Y-%m-%dT%H:%M:%S"), "architectures": archs})
+    return 0, f"{len(archs)} architectures from {image} -> {out_p}"
+
+
 def page_html():
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "deck.html"), encoding="utf-8") as f: return f.read()
@@ -875,7 +985,7 @@ def page_html():
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="NAS Model Cassette Changer — the deck")
-    ap.add_argument("cmd", choices=["serve", "sync", "summary", "fit"]); ap.add_argument("gb", nargs="?", type=float)
+    ap.add_argument("cmd", choices=["serve", "sync", "summary", "fit", "archs"]); ap.add_argument("arg", nargs="?")
     ap.add_argument("--config", default=os.environ.get("MCC_DECK_CONFIG", "~/.config/mcc/deck.json"))
     ap.add_argument("--demo", action="store_true", help="fake NAS + fake GPU box (no ssh/rsync/docker/Ollama); no token")
     ap.add_argument("--demo-no-ollama", action="store_true", help="with --demo: simulate Ollama stopped, so the TensorFold recipe row can be played")
@@ -883,8 +993,11 @@ def main(argv=None):
     a = ap.parse_args(argv)
     cfg = load_config(os.path.expanduser(a.config))
     if a.cmd == "fit":
-        if a.gb is None: ap.error("fit needs a size in GB")
-        k = nodes_needed(a.gb * 1e9, cfg["fit"]); print(f"{a.gb:g} GB -> {k if k else 'beyond'} node(s)"); return 0
+        try: gb = float(a.arg)
+        except (TypeError, ValueError): ap.error("fit needs a size in GB")
+        k = nodes_needed(gb * 1e9, cfg["fit"]); print(f"{gb:g} GB -> {k if k else 'beyond'} node(s)"); return 0
+    if a.cmd == "archs":
+        rc, msg = probe_archs(cfg, a.arg or "vllm"); print(msg, file=sys.stderr if rc else sys.stdout); return rc
     if a.demo:
         import tempfile
         root = tempfile.mkdtemp(prefix="mcc-demo-")
@@ -894,6 +1007,7 @@ def main(argv=None):
                    apps={"image": {"label": "ComfyUI", "url": "#comfyui"}, "video": {"label": "ComfyUI", "url": "#comfyui"},
                          "speech": {"label": "the speech service", "url": "#speech"}})
         cfg["_recipes"] = {k: {**RECIPE_DEFAULTS, **v, "key": k} for k, v in DEMO_RECIPES.items()}
+        cfg["_archs"] = {"vllm": set(DEMO_ENGINE_ARCHS), "sglang": set(DEMO_ENGINE_ARCHS)}; cfg["_archs_fixed"] = True
         demo_seed(cfg); deck = Deck(cfg, DemoSystem(cfg, ollama_up=not a.demo_no_ollama))
     else: deck = Deck(cfg)
     if a.cmd == "sync": print(json.dumps(deck.sync())); return 0

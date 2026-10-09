@@ -16,15 +16,22 @@ a{color:var(--acc)}h1{font-size:17px;letter-spacing:.14em;margin:0}
 .rcp{color:#f0abfc;border-color:#86198f;background:#2a0f2e}.eng{color:#bae6fd;border-color:#0c4a6e}
 .new{background:#14532d;color:#bbf7d0;border-color:#166534}.loc{background:#0c2a4a;color:#bae6fd;border-color:#0c4a6e}
 .dim{color:var(--dim)}.ok{color:#22c55e}.warnc{color:var(--warn)}
-.top{display:grid;grid-template-columns:minmax(280px,380px) 1fr;gap:12px;margin:12px 0}
-@media(max-width:820px){.top{grid-template-columns:1fr}}
+.top{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin:12px 0}
+.player{display:grid;grid-template-columns:minmax(240px,340px) 1fr;gap:16px;align-items:center}
+@media(max-width:700px){.player{grid-template-columns:1fr}}
+.player svg{width:100%;max-width:340px;display:block;margin:auto}
+.pl-k{font-size:11px;letter-spacing:.16em;color:var(--dim)}.pl-t{font-size:18px;font-weight:700;margin:2px 0;word-break:break-word}.pl-also{margin-top:8px}
+.engbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:10px 0 0;padding:7px 10px;background:var(--card);border:1px solid var(--bd);border-radius:8px}
+.esel{background:#0f141c;border:1px solid var(--bd);color:var(--tx);border-radius:16px;padding:4px 11px;font-size:12px;font-weight:600}
+.esel.on{border-color:var(--acc);background:#0c2a4a}.esel b{color:var(--dim);font-weight:500;margin-left:5px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:#475569;vertical-align:baseline}
+.d-serving{background:#22c55e}.d-stopped{background:#ef4444}.d-idle{background:#475569}.d-unwired{background:transparent;border:1px solid #64748b}
+.tred{border-color:#b91c1c;color:#fca5a5}button.sm{padding:2px 8px;font-size:11px}
 .panel{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px}
 .slots{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
 .slot{background:var(--card2);border:1px solid var(--bd);border-radius:8px;padding:10px}.slot.off{opacity:.45}
 .mem{height:8px;background:#1b2333;border-radius:4px;overflow:hidden;margin:6px 0}.mem i{display:block;height:100%;background:linear-gradient(90deg,#22c55e,#38b6ff)}
 .cass{border:1px solid #2f4b7a;border-radius:6px;padding:4px 8px;margin-top:5px;background:#0f1a33;font-size:12px}.prot{border-color:#166534;background:#0d1f15}
-.tape{display:flex;flex-direction:column;align-items:center;gap:8px}
-.tape svg{width:100%;max-width:340px}
 .reel{transform-origin:center;transform-box:fill-box}.spin .reel{animation:spin 2.4s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 .bar{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:8px 12px;margin-top:8px}
 section{margin-top:14px}section h2{font-size:12.5px;letter-spacing:.12em;margin:0 0 6px;display:flex;gap:10px;align-items:center;cursor:pointer;user-select:none}
@@ -58,11 +65,12 @@ section h2{flex-wrap:wrap;row-gap:4px}
 </style>
 </head>
 <body>
-<div class="row"><h1>📼 NAS MODEL CASSETTE CHANGER</h1><span class="dim">every model on the NAS · Ollama · vLLM · SGLang · recipe lanes · never evicts without your say-so</span></div>
+<div class="row"><h1>📼 NAS MODEL CASSETTE CHANGER</h1><span class="dim">every model on the NAS · pick an engine, insert a cassette · never evicts without your say-so</span></div>
 <div class="bar row" id="hdr">loading…</div>
+<div class="engbar" id="engbar" title="ENGINE — pick one to show only what it plays"></div>
 <div id="job"></div>
 <div class="top">
-  <div class="panel tape" id="tape"></div>
+  <div class="panel player" id="tape"></div>
   <div class="panel"><div class="row" style="justify-content:space-between"><b style="letter-spacing:.1em;font-size:12px">GPU NODES</b><span class="why" id="online"></span></div><div class="slots" id="slots" style="margin-top:8px"></div></div>
 </div>
 <div class="tabs" id="fns" title="FUNCTION — what the model does"></div>
@@ -90,10 +98,18 @@ section h2{flex-wrap:wrap;row-gap:4px}
 let TOKEN="";try{const qp=new URLSearchParams(location.search).get("t");if(qp){localStorage.setItem("mcc_token",qp);history.replaceState(null,"",location.pathname);}TOKEN=localStorage.getItem("mcc_token")||"";}catch(e){}
 const $=id=>document.getElementById(id),PICK={},SHUT=new Set();let D=null,timer=null;
 const LS=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},SS=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
-let FN=LS("mcc_fn","all");const FITOFF=new Set(LS("mcc_fitoff",[]));
+let FN=LS("mcc_fn","all"),ENG=LS("mcc_eng","all");
+{const h=new URLSearchParams(location.hash.slice(1));if(h.get("engine"))ENG=h.get("engine");}   /* a link can open the deck on one engine: #engine=vLLM */
+const FITOFF=new Set(LS("mcc_fitoff",[]));
 const FDESC={ready:"fits beside what is running — one click",switch:"plays after stopping what it names (you tick each one)",blocked:"one node, but refused right now — the reason is on the row",
  nodes:"bigger than one node — launched from its kit, not from here",app:"not a text model — it runs in its own app",pending:"still downloading on the NAS"};
 function setFn(k){FN=k;SS("mcc_fn",k);draw();}
+function setEng(k){ENG=k;SS("mcc_eng",k);draw();}
+const engOk=m=>ENG=="all"||(m.engines||[]).includes(ENG);
+function engBar(){const B=D.engine_bar||[];if(ENG!="all"&&!B.some(e=>e.key==ENG))ENG="all";
+ $("engbar").innerHTML=`<span class=lbl>ENGINE</span><button class="esel ${ENG=="all"?"on":""}" onclick="setEng('all')">All<b>${D.shelf.length}</b></button>`+B.map(e=>
+  `<button class="esel ${ENG==e.key?"on":""}" data-k="${esc(e.key)}" onclick="setEng(this.dataset.k)" title="${esc(e.key)}: ${esc(e.why)}"><span class="dot d-${esc(e.state)}"></span>${esc(e.key)}<b>${e.n}</b></button>`).join("")+
+  `<span class=why style="margin-left:auto">${(D.arch_check||[]).length?"architecture check: "+D.arch_check.map(x=>EL[x]||x).join(", "):"no architecture list yet — run mcc_deck.py archs vllm"}</span>`;}
 function togFit(c){FITOFF.has(c)?FITOFF.delete(c):FITOFF.add(c);SS("mcc_fitoff",[...FITOFF]);draw();}
 const TN=k=>k?`${k} NODE${k>1?"S":""}`:"BEYOND THE FLEET",TC=k=>"k"+(k&&k<=4?k:0);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
@@ -107,24 +123,36 @@ async function load(force){try{const [s,d]=await api("/api/deck"+(force?"?refres
 async function logPoll(){try{const [,l]=await api("/api/deck/log");const hist=(D.history||[]).slice().reverse().map(h=>`${h.ts.replace("T"," ")}  ${h.action}  ${h.id||""}${h.unit?" ["+h.unit+"]":""}${h.rc!==undefined?"  rc="+h.rc:""}${(h.evicted||[]).length?"  evicted "+h.evicted.join(", "):""}${h.note?"  — "+h.note:""}`).join("\n");
  $("log").textContent=(l.log?l.log.trim().split("\n").slice(-14).join("\n")+"\n\n":"")+"── history ──\n"+(hist||"(none yet)");}catch(e){}}
 function hdr(){const nas=D.nas||{},t=D.tiers||{};const built=esc((D.library_built||"?").replace("T"," ").slice(0,16));
- const nasTxt=nas.awake===false?`<span class=warnc>NAS asleep since ${esc((nas.asleep_since||"").replace("T"," ").slice(0,16))}</span> · showing the index built ${built}`:nas.awake?`<span class=ok>● NAS awake</span> · index built ${built}`:`<span class=dim>not synced yet — run mcc_deck.py sync</span>`;
+ const nasTxt=nas.awake===false?`<span class="dot d-stopped"></span><span class=warnc>NAS asleep since ${esc((nas.asleep_since||"").replace("T"," ").slice(0,16))}</span> · showing the index built ${built}`:nas.awake?`<span class="dot d-serving"></span><span class=ok>NAS awake</span> · index built ${built}`:`<span class=dim>not synced yet — run mcc_deck.py sync</span>`;
  const tiers=[...Array(D.max_nodes).keys()].map(i=>`<span class="chip ${TC(i+1)}">${TN(i+1)} ${t[i+1]||0}</span>`).join(" ");
  $("hdr").innerHTML=`<b>${D.n_shelf}</b>&nbsp;models · ${tiers} <span class="chip k0">BEYOND ${t.beyond||0}</span> ${D.n_new?`<span class="chip new">${D.n_new} new · ${D.new_days} d</span>`:""} · ${nasTxt}${D.syncing?" · <span class=warnc>checking the NAS…</span>":""} · protected ${(D.protected||[]).map(p=>`<span class="chip prot">${esc(p)}</span>`).join(" ")||"<span class=dim>none</span>"}`;
  $("online").textContent=`${D.online_nodes} of ${(D.slots||[]).length} online`;
 }
-function tape(){const p=D.playing||{},j=D.job||{};const on=!!p.id||j.running;const label=j.running?j.what.replace(/^INSERT /,""):(p.id||"— empty —");
- const sub=j.running?(j.progress||"starting…"):p.id?`${p.label||EL[p.runtime]||p.runtime||""} · ${p.name||""}${p.port?" · :"+p.port:""}`:"insert a cassette from the shelf below";
- $("tape").innerHTML=`<div class="why" style="letter-spacing:.14em">${j.running?"LOADING":p.id?"NOW PLAYING":"DECK EMPTY"}</div>
- <svg viewBox="0 0 340 210" class="${on?"spin":""}" role="img" aria-label="cassette"><defs><linearGradient id="sh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1e293b"/><stop offset="1" stop-color="#0f172a"/></linearGradient></defs>
- <rect x="6" y="6" width="328" height="198" rx="14" fill="url(#sh)" stroke="${on?"#38b6ff":"#334155"}" stroke-width="2"/>
+function tape(){const R=D.residents||{},p=D.playing||{},j=D.job||{},oll=(R.ollama||[]).map(o=>o.name),eng=R.engines_running||[];
+ let mode,title,sub,also=[];
+ if(j.running){mode="LOADING";title=(j.what||"").replace(/^INSERT /,"");sub=j.progress||"copying from the NAS…";}
+ else if(p.id){mode="NOW PLAYING";title=p.id;sub=[p.label||EL[p.runtime]||p.runtime,p.name,p.port?":"+p.port:""].filter(Boolean).join(" · ");also=oll.filter(n=>n!=p.name);}
+ else if(eng.length){mode="NOW PLAYING";title=eng[0].name;sub=eng[0].recipe?"recipe lane":"engine";also=oll;}
+ else if(oll.length){mode="NOW PLAYING";title=oll[0];sub=`Ollama · ${(R.ollama[0]||{}).gib??"?"} GiB${(D.protected||[]).includes(oll[0])?" · protected":""}`;also=oll.slice(1);}
+ else{mode="DECK EMPTY";title="— nothing loaded —";sub="insert a cassette from the shelf below";}
+ const on=mode!="DECK EMPTY",load=mode=="LOADING",cut=(t,n)=>t.length>n?t.slice(0,n-1)+"…":t,lab=cut(String(title).split("/").slice(-2).join(" / "),34);
+ const spokes=cx=>[0,60,120,180,240,300].map(a=>`<rect x="${cx-2}" y="105" width="4" height="9" fill="#64748b" transform="rotate(${a} ${cx} 127)"/>`).join("");
+ const LF=D.last_fail;let ack="";try{ack=localStorage.getItem("mcc_failack")||"";}catch(e){}
+ const fail=LF&&LF.ts!==ack&&!load?`<div class="job tred" style="margin:0 0 8px">⚠ last load failed: <b>${esc(String(LF.id||"").split("/").slice(1,2).join(""))}</b> — ${esc(LF.why)} <button class="sm ghost" data-ts="${esc(LF.ts)}" onclick="try{localStorage.setItem('mcc_failack',this.dataset.ts)}catch(e){};draw()">dismiss</button></div>`:"";
+ // the reels turn only while a cassette is LOADING; a loaded cassette sits still (the left reel full, the right one wound)
+ $("tape").innerHTML=`<svg viewBox="0 0 340 210" class="${load?"spin":""}" role="img" aria-label="cassette: ${esc(mode)} ${esc(title)}">
+ <defs><linearGradient id="sh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1e293b"/><stop offset="1" stop-color="#0f172a"/></linearGradient></defs>
+ <rect x="6" y="6" width="328" height="198" rx="14" fill="url(#sh)" stroke="${load?"#f59e0b":on?"#22c55e":"#334155"}" stroke-width="2"/>
  <rect x="26" y="22" width="288" height="58" rx="6" fill="${on?"#0c4a6e":"#1e293b"}" stroke="#334155"/>
- <text x="170" y="47" fill="#e2e8f0" font-size="12.5" font-family="ui-monospace,monospace" text-anchor="middle">${esc(label.length>36?label.slice(0,35)+"…":label)}</text>
- <text x="170" y="67" fill="#94a3b8" font-size="10" font-family="ui-monospace,monospace" text-anchor="middle">${esc(sub.length>44?"…"+sub.slice(-43):sub)}</text>
+ <text x="170" y="47" fill="#e2e8f0" font-size="12.5" font-family="ui-monospace,monospace" text-anchor="middle">${esc(lab)}</text>
+ <text x="170" y="67" fill="#94a3b8" font-size="10" font-family="ui-monospace,monospace" text-anchor="middle">${esc(cut(sub,46))}</text>
  <rect x="70" y="96" width="200" height="62" rx="31" fill="#020617" stroke="#334155"/>
- <g class="reel"><circle cx="110" cy="127" r="24" fill="#1f2937" stroke="#64748b"/><circle cx="110" cy="127" r="7" fill="#020617"/>${[0,60,120,180,240,300].map(a=>`<rect x="108" y="105" width="4" height="9" fill="#64748b" transform="rotate(${a} 110 127)"/>`).join("")}</g>
- <g class="reel"><circle cx="230" cy="127" r="${on?17:24}" fill="#1f2937" stroke="#64748b"/><circle cx="230" cy="127" r="7" fill="#020617"/>${[0,60,120,180,240,300].map(a=>`<rect x="228" y="105" width="4" height="9" fill="#64748b" transform="rotate(${a} 230 127)"/>`).join("")}</g>
+ <g class="reel"><circle cx="110" cy="127" r="${on?24:18}" fill="#1f2937" stroke="#64748b"/><circle cx="110" cy="127" r="7" fill="#020617"/>${spokes(110)}</g>
+ <g class="reel"><circle cx="230" cy="127" r="${on?17:24}" fill="#1f2937" stroke="#64748b"/><circle cx="230" cy="127" r="7" fill="#020617"/>${spokes(230)}</g>
  <path d="M60 204 L84 176 L256 176 L280 204" fill="#0b1220" stroke="#334155"/><circle cx="108" cy="190" r="4" fill="#334155"/><circle cx="232" cy="190" r="4" fill="#334155"/></svg>
- <div class="row">${p.id||(D.residents.engines_running||[]).length?`<button class="warn" onclick="eject()">⏏ EJECT</button>`:""}${p.id?`<span class="why">${esc(p.unit||"")}</span>`:""}</div>`;}
+ <div>${fail}<div class=pl-k>${load?"⏳ ":on?"▶ ":"⏹ "}${mode}</div><div class=pl-t>${esc(title)}</div><div class=dim>${esc(sub)}</div>
+ ${also.length?`<div class=pl-also><span class=pl-k>ALSO LOADED</span> ${also.map(n=>`<span class="chip${(D.protected||[]).includes(n)?" prot":""}">${esc(n)}</span>`).join(" ")}</div>`:""}
+ <div class=row style="margin-top:10px">${p.id||eng.length?`<button class="warn" onclick="eject()">⏏ EJECT</button>`:""}${p.unit?`<span class=why>${esc(p.unit)}</span>`:""}<span class=why>memory ${R.mem_avail_gib??"?"}/${R.mem_total_gib??"?"} GiB free</span></div></div>`;}
 function slots(){$("slots").innerHTML=(D.slots||[]).map(s=>{if(!s.online)return `<div class="slot off"><b>${esc(s.name)}</b> <span class=dim>${esc(s.note||"")}</span><div class=dim>offline — ${esc(s.why||"")}</div></div>`;
  if(!s.self)return `<div class="slot"><b>${esc(s.name)}</b> <span class=dim>${esc(s.note||"")}</span><div class=dim>online · ${s.mem_avail_gib??"?"} GiB free</div><div class=why>multi-node units launch from their kit</div></div>`;
  const used=s.mem_total_gib?Math.max(0,Math.min(100,100*(1-s.mem_avail_gib/s.mem_total_gib))):0;
@@ -148,12 +176,12 @@ function rowHtml(m){const us=m.units||[];const def=PICK[m.id]||(us.find(u=>!(m.p
  return `<tr data-id="${esc(m.id)}"><td><b>${esc(m.model)}</b> <span class=dim>${esc(m.variant)}</span><div class=row style="gap:4px;margin-top:3px"><span class="dim">${esc(m.maker)}</span>${m.new?'<span class="chip new">NEW</span>':""}${m.local?'<span class="chip loc">on this box</span>':""}${m.partial?'<span class="chip warnc">partial copy</span>':""}${m.status!="complete"?`<span class="chip warnc">${esc(m.status)}</span>`:""}${m.recipe?`<span class="chip rcp" title="${esc((m.recipe.license||"")+(m.recipe.repo?" · "+m.recipe.repo:""))}">recipe: ${esc(m.recipe.label)} · needs ${m.recipe.need_gib} GiB${m.recipe.requires_ollama_stopped?" · Ollama off":""}</span>`:""}${kits}</div></td>
  <td>${formCell(m)}</td><td style="white-space:nowrap">${m.size_gb} GB</td><td>${sel}${!m.units_exact?'<div class=why>per-quant sizes after the next sync</div>':""}</td>
  <td class=st>${["app","pending","nodes"].includes((m.fit||{}).class)?`<div class=why>${esc(m.fit.why)}</div>`:status(m,def)}</td><td class=act>${action(m,def)}</td></tr>`;}
-function draw(){if(!D)return;hdr();tape();slots();
+function draw(){if(!D)return;hdr();engBar();tape();slots();
  $("job").innerHTML=D.job.running?`<div class=job>⏳ ${esc(D.job.what)} — ${esc(D.job.progress||"working…")}</div>`:"";
  const q=$("q").value.toLowerCase(),fmt=$("fmt").value,nw=$("onlynew").checked;
- const base=D.shelf.filter(m=>(!q||(m.id+" "+m.category+" "+(m.function_label||"")).toLowerCase().includes(q))&&(!fmt||(fmt=="other"?!["gguf","safetensors"].includes(m.format):m.format==fmt))&&(!nw||m.new));
- const fns=(D.functions||[]).filter(f=>f.n);if(FN!="all"&&!fns.some(f=>f.key==FN))FN="all";
- $("fns").innerHTML=`<button class="tab ${FN=="all"?"on":""}" onclick="setFn('all')">All<b>${D.shelf.length}</b></button>`+fns.map(f=>`<button class="tab ${FN==f.key?"on":""}" onclick="setFn('${f.key}')">${esc(f.label)}<b>${f.n}</b></button>`).join("");
+ const base=D.shelf.filter(m=>(!q||(m.id+" "+m.category+" "+(m.function_label||"")).toLowerCase().includes(q))&&(!fmt||(fmt=="other"?!["gguf","safetensors"].includes(m.format):m.format==fmt))&&(!nw||m.new)&&engOk(m));
+ const fns=(D.functions||[]).map(f=>({...f,n:base.filter(m=>m.function==f.key).length})).filter(f=>f.n);if(FN!="all"&&!fns.some(f=>f.key==FN))FN="all";
+ $("fns").innerHTML=`<button class="tab ${FN=="all"?"on":""}" onclick="setFn('all')">All<b>${base.length}</b></button>`+fns.map(f=>`<button class="tab ${FN==f.key?"on":""}" onclick="setFn('${f.key}')">${esc(f.label)}<b>${f.n}</b></button>`).join("");
  const inFn=base.filter(m=>FN=="all"||m.function==FN),FL=D.fit_label||{},FO=D.fit_order||[];
  $("fits").innerHTML=FO.map(c=>{const n=inFn.filter(m=>m.fit.class==c).length;return n?`<span class="chip fchip f-${c} ${FITOFF.has(c)?"off":""}" onclick="togFit('${c}')" title="${esc(FDESC[c])} — click to hide/show">${esc(FL[c]||c)} ${n}</span>`:"";}).join("");
  const rows=inFn.filter(m=>!FITOFF.has(m.fit.class));

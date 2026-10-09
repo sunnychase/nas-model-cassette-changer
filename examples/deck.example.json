@@ -47,5 +47,9 @@
     "context_length": 32768,
     "trust_remote_code": false
   },
-  "recipes_file": "~/.config/mcc/recipes.json"
+  "recipes_file": "~/.config/mcc/recipes.json",
+  "engine_archs": {
+    "vllm": "~/.config/mcc/vllm_archs.json",
+    "sglang": "~/.config/mcc/sglang_archs.json"
+  }
 }

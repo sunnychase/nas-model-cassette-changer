@@ -1,6 +1,19 @@
 # Changelog
 
-## 1.2.0 (unreleased, branch form-fit-function)
+## 1.3.0 — the cassette selector
+- **ENGINE selector bar** at the top: All · Ollama · vLLM · SGLang · each recipe lane (e.g. TensorFold) · EXL3 · Apps, each with a model count
+  and a status dot (playing / Ollama stopped / idle / not playable from the deck). Picking one filters the shelf, the function tabs and the fit
+  chips. Remembered per browser; `#engine=<name>` deep links.
+- **New player:** cassette plus a text panel: what is playing, what else is resident, memory free. The reels turn only while a cassette is
+  loading. A failed load stays on the player with its reason until dismissed or superseded by a good load (`last_fail` in the state).
+- **Architecture check** (fail closed): the NAS index records `config.json` architectures; `mcc_deck.py archs vllm|sglang` records what the
+  engine image can load; the guard refuses an unsupported model before anything is copied or stopped. No list = no check (1.2 behaviour).
+- NAS awake/asleep shown as a green/red dot in the header.
+- EXL3 models are listed under their own engine (not playable yet).
+- Demo: 35 models, including an EXL3 row and a model whose architecture the demo image cannot load; a failed load in the history.
+- `mcc_deck.py fit` takes its size as before; new `mcc_deck.py archs`. 47 tests.
+
+## 1.2.0
 - **Form · Fit · Function shelf.** Sections are now by FUNCTION (Chat & reasoning, Coding, Small & on-device, Image, Video, Music & audio,
   Speech, Documents & OCR, Embeddings & search; configurable in `functions`), with a tab per function and its count.
 - Inside each section, rows are grouped by FIT, taken from the guard's own plans: **Ready now** (▶ PLAY), **After a switch** (⇄ SWITCH & PLAY,

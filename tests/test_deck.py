@@ -246,5 +246,70 @@ class FormFitFunction(unittest.TestCase):
             order = [r["function"] for r in st["shelf"]]; keys = [f["key"] for f in st["functions"]]
             self.assertEqual(order, sorted(order, key=keys.index))        # rows come out grouped in function order
 
+class CassetteSelector(unittest.TestCase):
+    """v1.3: ENGINE selector, ARCHITECTURE CHECK before anything is copied or stopped, last load failure."""
+    K = {"Qwen3ForCausalLM", "LlamaForCausalLM"}
+
+    def test_arch_refusal_fails_closed(self):
+        self.assertIsNone(D.arch_refusal({**ST}, "vllm", self.K))                                   # pre-1.3 index: no field, no check
+        self.assertIsNone(D.arch_refusal({**ST, "architectures": ["Qwen3ForCausalLM"]}, "vllm", self.K))
+        self.assertIsNone(D.arch_refusal({**ST, "architectures": ["Novel"]}, "vllm", None))          # no list for this engine: no check
+        for a, word in ((["NovelHybridForCausalLM"], "not in this vLLM image"), (None, "no config.json"), ("ERR", "could not be read"), ([], "declares no")):
+            self.assertIn(word, D.arch_refusal({**ST, "architectures": a}, "vllm", self.K))
+
+    def test_plan_insert_refuses_unknown_arch_before_copy(self):
+        c = cfg(); c["_archs"] = {"vllm": self.K}
+        p = D.plan_insert({**ST, "architectures": ["NovelHybridForCausalLM"]}, {"key": "w", "bytes": 20 * GiB, "nodes": 1, "engine": "vllm"}, res(), c)
+        self.assertIn("not in this vLLM image", p["refuse"]); self.assertNotIn("would_evict", p)
+        p = D.plan_insert({**ST, "architectures": ["Qwen3ForCausalLM"]}, {"key": "w", "bytes": 20 * GiB, "nodes": 1, "engine": "vllm"}, res(), c)
+        self.assertEqual(p["path"], "vllm")
+        c["_archs"] = {"vllm": self.K, "sglang": None}                                                # SGLang has no list: not checked
+        p = D.plan_insert({**ST, "architectures": ["Novel"]}, {"key": "w", "bytes": 20 * GiB, "nodes": 1, "engine": "sglang"}, res(), c)
+        self.assertEqual(p["path"], "sglang")
+
+    def test_read_archs(self):
+        d = tempfile.mkdtemp(); p = f"{d}/a.json"
+        self.assertIsNone(D.read_archs(p)); self.assertIsNone(D.read_archs(None))
+        with open(p, "w") as f: json.dump({"architectures": []}, f)
+        self.assertIsNone(D.read_archs(p))                                                           # an empty list is no list
+        with open(p, "w") as f: json.dump({"architectures": ["A", "B"]}, f)
+        self.assertEqual(D.read_archs(p), {"A", "B"})
+
+    def test_engines_of(self):
+        self.assertEqual(D.engines_of({"format": "gguf", "servable": True}), ["Ollama"])
+        self.assertEqual(D.engines_of({"format": "safetensors", "servable": True, "units": [{"engine": "vllm"}, {"engine": "sglang"}]}), ["vLLM", "SGLang"])
+        self.assertEqual(D.engines_of({"format": "safetensors", "servable": True, "quant": "EXL3", "runtime": ["exllama"]}), ["EXL3"])
+        self.assertEqual(D.engines_of({"recipe": {"label": "TensorFold"}, "servable": True}), ["TensorFold"])
+        self.assertEqual(D.engines_of({"format": "safetensors", "servable": False, "fit": {"class": "app"}}), ["Apps"])
+
+    def test_engine_bar_states(self):
+        rows = [{"format": "gguf", "servable": True}, {"format": "safetensors", "servable": True, "units": [{"engine": "vllm"}]},
+                {"recipe": {"label": "TensorFold"}, "servable": True}, {"quant": "EXL3", "servable": True, "format": "safetensors"}]
+        bar = {e["key"]: e for e in D.engine_bar(rows, res(ollama=[("qwen3:14b", 10)]), {})}
+        self.assertEqual([e["key"] for e in D.engine_bar(rows, res(), {})], ["Ollama", "vLLM", "TensorFold", "EXL3"])
+        self.assertEqual(bar["Ollama"]["state"], "serving"); self.assertEqual(bar["vLLM"]["state"], "idle"); self.assertEqual(bar["EXL3"]["state"], "unwired")
+        bar = {e["key"]: e for e in D.engine_bar(rows, res(ollama_up=False, engines=[{"engine": "tensorfold", "name": "TensorFold"}]), {})}
+        self.assertEqual(bar["Ollama"]["state"], "stopped"); self.assertEqual(bar["TensorFold"]["state"], "serving")
+
+    def test_last_fail_is_superseded_by_a_good_insert(self):
+        bad = {"action": "INSERT", "id": "A/B/C", "rc": 1, "ts": "t1", "note": "vLLM exited"}
+        self.assertEqual(D.last_fail([bad])["why"], "vLLM exited")
+        self.assertEqual(D.last_fail([bad, {"action": "EJECT"}])["id"], "A/B/C")                    # an eject does not clear it
+        self.assertIsNone(D.last_fail([bad, {"action": "INSERT", "rc": 0}]))
+        self.assertEqual(D.last_fail([{**bad, "note": ""}], "copy FAILED")["why"], "copy FAILED")
+        self.assertIsNone(D.last_fail([]))
+
+    def test_demo_state_has_selector_and_failure(self):
+        root = tempfile.mkdtemp(); c = cfg(state_dir=f"{root}/s", local_dir=f"{root}/d", protected=["qwen3:14b"])
+        c["_archs"] = {"vllm": set(D.DEMO_ENGINE_ARCHS), "sglang": set(D.DEMO_ENGINE_ARCHS)}; c["_archs_fixed"] = True
+        D.demo_seed(c); st = D.Deck(c, D.DemoSystem(c)).state()
+        keys = [e["key"] for e in st["engine_bar"]]
+        for k in ("Ollama", "vLLM", "SGLang", "EXL3", "Apps"): self.assertIn(k, keys)
+        self.assertEqual(sum(1 for r in st["shelf"] if "Ollama" in r["engines"]), next(e["n"] for e in st["engine_bar"] if e["key"] == "Ollama"))
+        nov = next(r for r in st["shelf"] if r["model"] == "Novel-Hybrid-9B")
+        self.assertTrue(all("not in this" in p["refuse"] for p in nov["plans"].values()))
+        self.assertEqual(st["last_fail"]["id"], "Mistral/Mistral-Small-3.2-24B/original"); self.assertEqual(st["arch_check"], ["sglang", "vllm"])
+
+
 if __name__ == "__main__":
     unittest.main()

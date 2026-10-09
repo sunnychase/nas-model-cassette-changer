@@ -11,6 +11,20 @@ Local models are huge. A GPU box has a fast but small disk; a NAS has lots of ch
 - **The guard**: an insert never stops anything you didn't name. If loading a model would evict something, the deck lists exactly what would stop and waits until you tick every name. Models you mark as *protected* keep their memory reserved even when they are unloaded.
 - **The ejector**: stops the cassette and, if you ask, deletes the local copy. The NAS copy is never touched.
 
+## The cassette selector (v1.3)
+
+![The cassette selector](docs/images/screenshot-selector.png)
+
+- **ENGINE bar:** All · Ollama · vLLM · SGLang · every recipe lane (e.g. TensorFold) · EXL3 · Apps, each with its model count and a status dot
+  (green = playing now, red = Ollama stopped, grey = idle, hollow = listed but not playable from the deck). Pick one and the whole shelf shows only
+  what that engine plays. Links work too: `http://deck:8099/#engine=vLLM`.
+- **The player:** a cassette that shows what is loaded, what else is resident, and memory free. The reels turn **only while a cassette is
+  loading**; a loaded cassette sits still with its border green. A failed load stays on the player (*⚠ last load failed: … — why*) until you
+  dismiss it or a load succeeds.
+- **Architecture check:** before anything is copied or stopped, a safetensors model's `config.json` architectures are checked against the list
+  its engine image can actually load (`mcc_deck.py archs vllm`). A model the image can't run is refused up front instead of after a long copy.
+- **NAS dot** in the header: green = awake at the last sync, red = asleep (the last index is shown).
+
 It is two plain Python files with **no dependencies** beyond the standard library, plus `ssh`, `rsync`, Ollama and/or Docker on the GPU box.
 
 ## Engines
@@ -21,6 +35,7 @@ It is two plain Python files with **no dependencies** beyond the standard librar
 | safetensors | **vLLM** | `vllm/vllm-openai` container on :8010 |
 | safetensors | **SGLang** | `lmsysorg/sglang` container on :30000 |
 | anything listed in `recipes.json` | **its recipe lane**, e.g. **TensorFold** | the recipe's own `start.sh` / `stop.sh`, health-checked |
+| EXL3 / EXL2 | *listed under EXL3, not played yet* | needs an exllamav3 / TabbyAPI player; the selector shows them so you know they are there |
 
 One GPU engine at a time: a vLLM, SGLang or recipe cassette must be ejected before another one is inserted. Recipe lanes such as TensorFold state their own memory need, and the deck checks it before stopping anything. If the recipe needs Ollama stopped, the deck says so and waits for you; it never stops a system service itself. See the [User Guide §7](docs/USER_GUIDE.md#7-engines-and-recipe-lanes-sglang-tensorfold).
 
@@ -54,7 +69,7 @@ python3 deck/mcc_deck.py serve --demo
 # open http://127.0.0.1:8099/
 ```
 
-Demo mode fakes a 33-model NAS and a 128 GB GPU box. Insert, eject, the guard dialog and the log all work; nothing on your machine is touched. Add `--demo-no-ollama` to simulate a box with Ollama stopped, so you can play the TensorFold recipe row.
+Demo mode fakes a 35-model NAS and a 128 GB GPU box. Insert, eject, the guard dialog and the log all work; nothing on your machine is touched. Add `--demo-no-ollama` to simulate a box with Ollama stopped, so you can play the TensorFold recipe row.
 
 ## Screenshots
 
@@ -65,6 +80,8 @@ Demo mode fakes a 33-model NAS and a 128 GB GPU box. Insert, eject, the guard di
 | ![loading](docs/images/screenshot-loading.png) | ![ejector](docs/images/screenshot-ejector-log.png) |
 | **Engines:** vLLM or SGLang per model, plus a TensorFold recipe row | **A TensorFold recipe lane playing** (Ollama stopped) |
 | ![engines](docs/images/screenshot-engines.png) | ![tensorfold](docs/images/screenshot-tensorfold.png) |
+| **Selector on vLLM:** the architecture check refuses a model before the copy | **Loading:** the only time the reels turn |
+| ![architecture check](docs/images/screenshot-arch-check.png) | ![loading](docs/images/screenshot-loading.png) |
 
 <p align="center"><img src="docs/images/screenshot-mobile.png" width="300" alt="mobile view"><br><em>Works on a phone.</em></p>
 

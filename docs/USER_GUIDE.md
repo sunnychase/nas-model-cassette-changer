@@ -129,10 +129,21 @@ loginctl enable-linger "$USER"                        # keep user services runni
 
 The first start creates a random access token in `~/.config/mcc/token` (mode 0600).
 
+Optional but recommended: record what your engine images can load, for the **architecture check** (§7.3). Re-run it after pulling a new image.
+
+```bash
+python3 ~/.local/share/mcc/mcc_deck.py archs vllm     # e.g. "365 architectures from vllm/vllm-openai:latest -> ~/.config/mcc/vllm_archs.json"
+python3 ~/.local/share/mcc/mcc_deck.py archs sglang
+```
+
 ## 5. Using the page
 
 - **Header:** model counts per tier, how many models are new (first seen in the last 7 days), whether the NAS was awake at the last sync and when its index was built, and your protected models.
-- **Deck:** what is loading or playing. **⏏ EJECT** stops it.
+- **ENGINE bar (the cassette selector):** All · Ollama · vLLM · SGLang · each recipe lane · EXL3 · Apps, with counts and a status dot (green =
+  playing now, red = Ollama stopped, grey = idle, hollow = listed but not playable from the deck). Picking one filters every section, tab and
+  count below it. The choice is remembered per browser; `#engine=vLLM` in the URL opens the page on one engine.
+- **Player:** what is loading or playing, what else is resident, and memory free. The reels turn only while a cassette is loading. A failed
+  load shows *⚠ last load failed* with the reason until you dismiss it or a later load succeeds. **⏏ EJECT** stops the cassette.
 - **GPU nodes:** memory and disk on this box, everything resident in Ollama (protected models in green), any big lanes, and the status of other nodes.
 - **Filters:** search, category, format, tier, *new only*, and *insertable now* (hides everything the guard would refuse).
 - **Shelf:** one table per tier. For a GGUF with several quants, choose one in the **unit → nodes** menu; the *if you insert it now* column updates for that quant. It shows one of three outcomes:
@@ -239,6 +250,18 @@ TensorFold and its recipes are separate projects with their own licences. This r
 
 Try it with no hardware: `python3 deck/mcc_deck.py serve --demo --demo-no-ollama`, then insert the **Qwen3.8-Flash-Next** row.
 
+### 7.3 Architecture check
+
+A vLLM or SGLang image can only load the model architectures it was built with. Without a check, an unsupported model is copied (minutes),
+whatever it would stop is stopped, and only then does the engine refuse it. From 1.3:
+
+1. The NAS indexer records each model's `config.json` `architectures` in `library.json`.
+2. `mcc_deck.py archs vllm` (and `archs sglang`) runs the engine image once and writes the list it can load to `engine_archs.<engine>`.
+3. Before an insert, the guard refuses a safetensors model whose architectures are all missing from that list, and says so on the row.
+
+It fails closed: once a list exists, a model with no `config.json`, an unreadable one, or one that declares no architecture is refused too.
+No list for an engine (or a NAS index older than 1.3) means no check, as before. Recipe lanes are not checked: the recipe states its own fit.
+
 ## 8. Configuration reference
 
 ### `nas.json`
@@ -276,6 +299,7 @@ Try it with no hardware: `python3 deck/mcc_deck.py serve --demo --demo-no-ollama
 | `sglang.*` | image, port 30000, `mem_fraction_static` 0.85, `context_length` 32768, `trust_remote_code: false` | container settings |
 | `recipes_file` | `~/.config/mcc/recipes.json` | recipe lanes (§7.2); a missing file means there are none |
 | `new_days` | `7` | how long the NEW badge lasts |
+| `engine_archs` | `{"vllm": "~/.config/mcc/vllm_archs.json", "sglang": "~/.config/mcc/sglang_archs.json"}` | per engine, the architecture list written by `mcc_deck.py archs`; a missing file = no check (§7.3) |
 
 **Tuning the fit for other hardware:**
 
@@ -310,6 +334,8 @@ List the other nodes in `fleet` with an ssh target; the page shows each one's fr
 | *cannot read Ollama right now* | Is `ollama serve` up at `ollama_url`? The guard refuses rather than guessing. |
 | vLLM / SGLang cassette never answers | Run `docker logs mcc-vllm` (or `mcc-sglang`). Common causes: a model that needs `trust_remote_code`, a too-large context setting, or a quant format your GPU or that engine doesn't support. |
 | Recipe row says *stop Ollama first* | The recipe has `requires_ollama_stopped`. Stop Ollama, insert, and start Ollama again after EJECT. |
+| Row says *architecture … is not in this vLLM image* | The image can't load that model. Pull a newer image and re-run `mcc_deck.py archs vllm`, try SGLang, or add a recipe lane for it. |
+| Selector shows *no architecture list yet* | Run `mcc_deck.py archs vllm` (needs Docker and the image). Until then nothing is checked. |
 | Recipe never answers | Run its `start` command by hand and watch the deck log. Check that `port` and `health_path` match what the recipe actually serves. |
 | Copy speed far below the link speed | The NAS disks, not the network, are the limit (one HDD ≈ 150–250 MB/s). See §2.1. |
 | Copy is slow | rsync runs over ssh. Use a wired link to the NAS; a single HDD tops out around 150–250 MB/s. |
@@ -324,7 +350,7 @@ Every call except `/` and `/api/health` needs the header `X-Token: <token>`.
 | method | path | body | returns |
 |---|---|---|---|
 | GET | `/api/health` | | `{"ok": true, "version"}` |
-| GET | `/api/deck[?refresh=1]` | | full state: shelf, plans, slots, playing, history (`refresh` starts a background sync) |
+| GET | `/api/deck[?refresh=1]` | | full state: shelf (each row has `engines`), plans, slots, playing, history, `engine_bar`, `last_fail`, `arch_check` (`refresh` starts a background sync) |
 | GET | `/api/deck/summary` | | counts per tier, NAS status |
 | GET | `/api/deck/log` | | the last copy/start log and the current job |
 | POST | `/api/deck/insert` | `{"id", "unit", "confirm_evict": [names]}` (`unit` = a key from the row's `units`, e.g. `"(whole variant) · SGLang"`) | `{"started": true}`, or `409 {"error", "would_evict"}` |
