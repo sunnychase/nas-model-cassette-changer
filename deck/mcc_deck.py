@@ -25,7 +25,7 @@ Usage:
   mcc_deck.py fit GB                          # how many nodes a GB-sized unit needs under your config
   mcc_deck.py archs vllm|sglang [--config FILE]   # read the architectures the engine image can load (for the ARCHITECTURE CHECK)
 """
-import argparse, glob, hmac, json, os, re, secrets, shlex, shutil, subprocess, sys, threading, time, urllib.request
+import argparse, collections, glob, hmac, json, os, re, secrets, shlex, shutil, subprocess, sys, threading, time, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -306,6 +306,53 @@ def last_fail(history, pull_log_tail=""):
     return None
 
 
+# ── BENCHMARKS (v1.3): live tok/s from the engine's own counters + on-demand Decode / Prefill runs ─────────────────────────────────
+PROM = {"gen": ("vllm:generation_tokens_total", "sglang:generation_tokens_total"),
+        "prompt": ("vllm:prompt_tokens_total", "sglang:prompt_tokens_total"),
+        "running": ("vllm:num_requests_running", "sglang:num_running_reqs"),
+        "waiting": ("vllm:num_requests_waiting", "sglang:num_queue_reqs")}
+
+
+def parse_prom(text):
+    """Prometheus text -> {gen, prompt, running, waiting} (each summed over its label sets; a missing metric stays absent)"""
+    out = {}
+    for line in (text or "").splitlines():
+        if not line or line[0] == "#": continue
+        name = line.split("{", 1)[0].split(" ", 1)[0]
+        for k, names in PROM.items():
+            if name in names:
+                try: out[k] = out.get(k, 0.0) + float(line.rsplit(" ", 1)[1])
+                except ValueError: pass
+    return out
+
+
+def rates(prev, cur):
+    """two (t, counters) samples -> (decode tok/s, prefill tok/s); None when they cannot be compared (first sample, counter reset)"""
+    if not prev or not cur: return None
+    dt = cur[0] - prev[0]; a, b = prev[1], cur[1]
+    if dt <= 0 or "gen" not in a or "gen" not in b: return None
+    dg, dp = b["gen"] - a["gen"], b.get("prompt", 0) - a.get("prompt", 0)
+    if dg < 0 or dp < 0: return None                                  # the engine restarted
+    return round(dg / dt, 1), round(dp / dt, 1)
+
+
+def bump_peak(peaks, day, kind, v, keep=30):
+    """daily peak tok/s per kind ({day: {decode, prefill}}), the last `keep` days"""
+    if v is None or v <= 0: return peaks
+    d = peaks.setdefault(day, {}); d[kind] = max(d.get(kind, 0), round(v, 1))
+    for k in sorted(peaks)[:-keep]: peaks.pop(k)
+    return peaks
+
+
+BENCH_DECODE = "Write a long, detailed story about a lighthouse keeper who finds a message in a bottle. Keep going."
+BENCH_FILL = "The deck copies a model from the shelf, starts it, and measures how fast it reads and writes. "   # ≈ 20 tokens
+
+
+def bench_prompt(kind, nonce):
+    """decode: a short prompt, 256 tokens out · prefill: ≈ 2,000 tokens in, 1 out. The nonce defeats prefix / prompt caches."""
+    return f"[{nonce}] " + (BENCH_DECODE if kind == "decode" else BENCH_FILL * 100 + "\nSay OK.")
+
+
 FIT_ORDER = ["ready", "switch", "blocked", "nodes", "app", "pending"]
 FIT_LABEL = {"ready": "Ready now", "switch": "After a switch", "blocked": "Blocked right now", "nodes": "Needs more nodes",
              "app": "Runs in its own app", "pending": "Not on the shelf yet"}
@@ -357,6 +404,41 @@ class System:
                                          headers={"Content-Type": "application/json"})
             return json.load(urllib.request.urlopen(req, timeout=timeout))
         except Exception: return None
+
+    def engine_metrics(self, port, path="/metrics"):
+        try: return urllib.request.urlopen(f"http://127.0.0.1:{int(port)}{path}", timeout=3).read().decode("utf-8", "replace")
+        except Exception: return None
+
+    def bench_openai(self, port, model, kind):
+        """one timed /v1/completions call (streamed) -> {tok_s, tokens, secs}. decode = output tokens after the first one / time after it;
+        prefill = prompt tokens / time to the first token (includes HTTP and queueing, so it reads a little low)."""
+        body = {"model": model, "prompt": bench_prompt(kind, secrets.token_hex(4)), "stream": True, "temperature": 0,
+                "max_tokens": 256 if kind == "decode" else 1, "ignore_eos": kind == "decode", "stream_options": {"include_usage": True}}
+        req = urllib.request.Request(f"http://127.0.0.1:{int(port)}/v1/completions", data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+        t0 = time.time(); t1 = t2 = None; usage = {}
+        with urllib.request.urlopen(req, timeout=600) as r:
+            for raw in r:
+                line = raw.decode("utf-8", "replace").strip()
+                if not line.startswith("data:") or line.endswith("[DONE]"): continue
+                d = json.loads(line[5:])
+                if d.get("usage"): usage = d["usage"]
+                if any((c.get("text") or "") for c in d.get("choices") or []): t2 = time.time(); t1 = t1 or t2
+        if kind == "decode":
+            n = int(usage.get("completion_tokens") or 0)
+            if n < 2 or not t1 or t2 <= t1: raise RuntimeError("the engine returned too few tokens to time")
+            return {"tok_s": round((n - 1) / (t2 - t1), 1), "tokens": n, "secs": round(t2 - t0, 2)}
+        n = int(usage.get("prompt_tokens") or 0)
+        if not n or not t1: raise RuntimeError("the engine did not report prompt tokens")
+        return {"tok_s": round(n / (t1 - t0), 1), "tokens": n, "secs": round(t1 - t0, 2)}
+
+    def bench_ollama(self, name, kind):
+        """Ollama times itself: eval_count / eval_duration (decode), prompt_eval_count / prompt_eval_duration (prefill)"""
+        r = self.ollama("/api/generate", {"model": name, "prompt": bench_prompt(kind, secrets.token_hex(4)), "stream": False,
+                                          "options": {"num_predict": 256 if kind == "decode" else 1, "temperature": 0, "num_ctx": self.cfg["num_ctx"]}}, timeout=600)
+        if not r: raise RuntimeError("Ollama did not answer")
+        c, d = (r.get("eval_count"), r.get("eval_duration")) if kind == "decode" else (r.get("prompt_eval_count"), r.get("prompt_eval_duration"))
+        if not c or not d: raise RuntimeError("Ollama returned no timings")
+        return {"tok_s": round(c / (d / 1e9), 1), "tokens": c, "secs": round((r.get("total_duration") or 0) / 1e9, 2)}
 
     def meminfo(self):
         mem = {}
@@ -520,6 +602,9 @@ class Deck:
         self.LIB, self.UNITS, self.SEEN, self.NAS = f"{s}/library.json", f"{s}/units.json", f"{s}/seen.json", f"{s}/nas_status.json"
         self.ACTIONS, self.PULL_LOG, self.PLAYING = f"{s}/actions.jsonl", f"{s}/pull.log", f"{s}/playing.json"
         self.lock = threading.Lock(); self.job = {"running": False, "what": "", "t0": 0, "progress": ""}; self.syncing = False
+        self.BENCH, self.PEAKS = f"{s}/bench.jsonl", f"{s}/peaks.json"
+        self.live = collections.deque(maxlen=360); self.prev = None; self.served = {}      # 30 min of 5 s samples, per target
+        self.bjob = {"running": False, "kind": "", "msg": ""}
 
     # sync ----------------------------------------------------------------------------------------------------------
     def sync(self):
@@ -656,7 +741,7 @@ class Deck:
                 "nas": _rjson(self.NAS, {}), "syncing": self.syncing, "n_shelf": len(rows), "shelf": rows, "tiers": tiers, "max_nodes": mx,
                 "n_new": sum(1 for r in rows if r["new"]), "slots": slots, "online_nodes": sum(1 for s in slots if s.get("online")),
                 "protected": self.cfg["protected"], "residents": res, "job": dict(self.job), "playing": playing,
-                "engine_bar": engine_bar(rows, res, playing), "last_fail": lf, "arch_check": sorted(e for e, a in (self.cfg.get("_archs") or {}).items() if a),
+                "engine_bar": engine_bar(rows, res, playing), "bench": self.bench_state(res), "last_fail": lf, "arch_check": sorted(e for e, a in (self.cfg.get("_archs") or {}).items() if a),
                 "local": self.local_cassettes(rows), "history": hist[-12:], "new_days": self.cfg["new_days"], "engines": self.cfg["engines"],
                 "functions": [{"key": k, "label": lab, "n": sum(1 for r in rows if r["function"] == k),
                                "fit": {c: sum(1 for r in rows if r["function"] == k and r["fit"]["class"] == c) for c in FIT_ORDER}}
@@ -671,6 +756,92 @@ class Deck:
             ks = [u["nodes"] for u in self.units_for(m, ui)[0] if u["nodes"]]; k = str(min(ks)) if ks else "beyond"; t[k] = t.get(k, 0) + 1
         nas = _rjson(self.NAS, {})
         return {"total": len(ms), "tiers": t, "built": d.get("built") if isinstance(d, dict) else None, "nas_awake": nas.get("awake"), "asleep_since": nas.get("asleep_since")}
+
+    # benchmarks ----------------------------------------------------------------------------------------------------
+    def target(self, res=None):
+        """what the benchmark panel measures — the same thing the player shows: the deck cassette, else a running engine / recipe lane,
+        else the first Ollama resident. -> {key, label, model, engine, port?, metrics?, context} or None"""
+        p = _rjson(self.PLAYING, {}); rcp = self.recipes()
+        res = res or self.sys.residents(self.cfg["state_dir"], rcp)
+        def eng(e, name, label):
+            if e in ("vllm", "sglang"):
+                v = self.cfg[e]; return {"engine": ENGINE_LABEL[e], "port": v["port"], "metrics": "/metrics", "model": name, "label": label,
+                                         "context": v.get("max_model_len") or v.get("context_length")}
+            r = next((x for x in rcp.values() if (x.get("label") or "recipe") == label or x.get("engine") == e), None) or {}
+            return {"engine": r.get("label") or label, "port": r.get("port"), "metrics": r.get("metrics_path", "/metrics"), "model": r.get("served") or name,
+                    "label": label, "context": r.get("context")}
+        if p.get("id") and p.get("runtime") == "ollama":
+            t = {"engine": "Ollama", "model": p["name"], "label": p["id"], "context": self.cfg["num_ctx"]}
+        elif p.get("id"): t = eng(p.get("runtime"), p.get("name"), p.get("label") or ENGINE_LABEL.get(p.get("runtime"), p.get("runtime")))
+        elif res.get("engines_running"):
+            e = res["engines_running"][0]; t = eng(e.get("engine"), e.get("name"), e.get("name"))
+        elif res.get("ollama"): t = {"engine": "Ollama", "model": res["ollama"][0]["name"], "label": res["ollama"][0]["name"], "context": None}
+        else: return None
+        t["key"] = f"{t['engine']}:{t['model']}"; return t
+
+    def sample(self, res=None):
+        """one live sample of the target's own counters (vLLM / SGLang / a recipe with metrics_path). Ollama keeps no counters."""
+        t = self.target(res); now = time.time()
+        if not t or not t.get("port") or not t.get("metrics"): self.prev = None; return None
+        c = parse_prom(self.sys.engine_metrics(t["port"], t["metrics"]))
+        if "gen" not in c: self.prev = None; return None
+        cur = (now, c); r = rates(self.prev, cur) if self.prev and self.prev[2] == t["key"] else None; self.prev = (now, c, t["key"])
+        if r is None: return None
+        self.live.append({"t": round(now), "key": t["key"], "decode": r[0], "prefill": r[1], "running": c.get("running"), "waiting": c.get("waiting"), "gen": c["gen"]})
+        if r[0] > 0: self.served[t["key"]] = now
+        day = time.strftime("%Y-%m-%d"); pk = _rjson(self.PEAKS, {})
+        _wjson(self.PEAKS, bump_peak(bump_peak(pk, day, "decode", r[0]), day, "prefill", r[1]))
+        return r
+
+    def sampler(self, every=5):
+        def run():
+            while True:
+                try: self.sample()
+                except Exception: pass
+                time.sleep(every)
+        threading.Thread(target=run, daemon=True).start()
+
+    def bench(self, kind):
+        if kind not in ("decode", "prefill"): return {"error": "kind must be decode or prefill", "status": 400}
+        with self.lock:
+            if self.job["running"]: return {"error": "an insert is running — benchmark after it", "status": 409}
+            if self.bjob["running"]: return {"error": "a benchmark is already running", "status": 409}
+            t = self.target()
+            if not t: return {"error": "nothing is loaded — insert a cassette first", "status": 409}
+            if t["engine"] != "Ollama" and not t.get("port"): return {"error": f"no port known for {t['engine']}", "status": 409}
+            self.bjob.update(running=True, kind=kind, msg=f"{kind} on {t['model']}…")
+        def run():
+            try:
+                r = self.sys.bench_ollama(t["model"], kind) if t["engine"] == "Ollama" else self.sys.bench_openai(t["port"], t["model"], kind)
+                row = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "key": t["key"], "engine": t["engine"], "model": t["model"], "kind": kind, **r}
+                with open(self.BENCH, "a") as f: f.write(json.dumps(row) + "\n")
+                _wjson(self.PEAKS, bump_peak(_rjson(self.PEAKS, {}), row["ts"][:10], kind, r["tok_s"]))
+                self.bjob["msg"] = f"{kind}: {r['tok_s']} tok/s ({r['tokens']} tokens)"
+            except Exception as e: self.bjob["msg"] = f"{kind} failed: {type(e).__name__}: {str(e)[:160]}"
+            finally: self.bjob["running"] = False
+        threading.Thread(target=run, daemon=True).start()
+        return {"started": True, "kind": kind, "model": t["model"]}
+
+    def bench_state(self, res=None):
+        t = self.target(res); out = {"target": t, "job": dict(self.bjob), "live": None, "last": {}, "daily": []}
+        pk = _rjson(self.PEAKS, {}); days = [time.strftime("%Y-%m-%d", time.localtime(time.time() - i * 86400)) for i in range(13, -1, -1)]
+        out["daily"] = [{"day": d, "decode": (pk.get(d) or {}).get("decode"), "prefill": (pk.get(d) or {}).get("prefill")} for d in days]
+        if not t: return out
+        rows = []
+        if os.path.exists(self.BENCH):
+            with open(self.BENCH) as f: rows = [json.loads(l) for l in f if l.strip()][-200:]
+        for k in ("decode", "prefill"):
+            r = [x for x in rows if x.get("key") == t["key"] and x.get("kind") == k]
+            if r: out["last"][k] = {**r[-1], "best": max(x["tok_s"] for x in r), "runs": len(r)}
+        L = [x for x in self.live if x["key"] == t["key"]]
+        if L:
+            busy = [x for x in L if x["decode"] > 0] or L; bp = [x for x in L if x["prefill"] > 0] or L
+            seen = self.served.get(t["key"])
+            out["live"] = {"decode": [x["decode"] for x in L][-90:], "prefill": [x["prefill"] for x in L][-90:], "now_decode": L[-1]["decode"], "now_prefill": L[-1]["prefill"],
+                           "avg_decode": round(sum(x["decode"] for x in busy) / len(busy), 1), "avg_prefill": round(sum(x["prefill"] for x in bp) / len(bp), 1),
+                           "running": L[-1]["running"], "waiting": L[-1]["waiting"], "generated": int(L[-1]["gen"]),
+                           "idle_s": round(time.time() - seen) if seen else None, "minutes": round((L[-1]["t"] - L[0]["t"]) / 60)}
+        return out
 
     # actions -------------------------------------------------------------------------------------------------------
     def log(self, **r):
@@ -860,6 +1031,26 @@ class DemoSystem(System):
 
     def ollama_rm(self, name): self.tags.pop(name, None)
 
+    def engine_metrics(self, port, path="/metrics"):
+        """a busy-then-idle serving pattern: ~60 tok/s decode and ~1,800 tok/s prefill while requests run"""
+        if not self.engine: return None
+        c = self.__dict__.setdefault("ctr", {"t": time.time(), "gen": 296000.0, "prompt": 3.1e6, "i": 0})
+        now = time.time(); dt = now - c["t"]; c["t"] = now; c["i"] += 1
+        busy = (c["i"] // 6) % 4 != 3; wob = 1 + 0.12 * ((c["i"] * 7919) % 13 - 6) / 6
+        run = 1 if busy else 0
+        c["gen"] += 63 * wob * dt * run; c["prompt"] += 1830 * wob * dt * run * (1 if c["i"] % 3 == 0 else 0.15)
+        return (f"# TYPE vllm:generation_tokens_total counter\nvllm:generation_tokens_total{{model_name=\"demo\"}} {c['gen']:.0f}\n"
+                f"vllm:prompt_tokens_total{{model_name=\"demo\"}} {c['prompt']:.0f}\nvllm:num_requests_running{{model_name=\"demo\"}} {run}\n"
+                f"vllm:num_requests_waiting{{model_name=\"demo\"}} 0\n")
+
+    def bench_openai(self, port, model, kind):
+        time.sleep(2.5)
+        return {"tok_s": 61.8, "tokens": 256, "secs": 4.2} if kind == "decode" else {"tok_s": 1874.0, "tokens": 2014, "secs": 1.07}
+
+    def bench_ollama(self, name, kind):
+        time.sleep(2)
+        return {"tok_s": 38.4, "tokens": 256, "secs": 6.7} if kind == "decode" else {"tok_s": 912.0, "tokens": 2011, "secs": 2.2}
+
 
 DEMO_ARCH = {"Qwen": "Qwen3ForCausalLM", "OpenAI": "GptOssForCausalLM", "Google": "Gemma3ForConditionalGeneration", "Meta": "LlamaForCausalLM",
              "Mistral": "MistralForCausalLM", "DeepSeek": "DeepseekV3ForCausalLM", "Zhipu-GLM": "Glm4MoeForCausalLM", "Microsoft": "Phi3ForCausalLM",
@@ -868,7 +1059,7 @@ DEMO_ENGINE_ARCHS = sorted(set(DEMO_ARCH.values()) - {"NovelHybridForCausalLM"} 
 
 DEMO_RECIPES = {"Qwen/Qwen3.8-Flash-Next/Vontra-MLX-4bit-MTP": {
     "label": "TensorFold", "engine": "tensorfold", "served": "Qwen3.8-Flash-Next", "quant": "MLX 4-bit + MTP", "nodes": 1, "need_gib": 112, "port": 8888,
-    "health_path": "/health", "requires_ollama_stopped": True, "copy": False, "start": "~/recipes/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold/start.sh",
+    "health_path": "/health", "metrics_path": "/metrics", "requires_ollama_stopped": True, "copy": False, "start": "~/recipes/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold/start.sh",
     "stop": "~/recipes/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold/stop.sh",
     "repo": "https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold",
     "license": "recipe: MIT (see its LICENSE) · weights: see the model card"}}
@@ -903,6 +1094,13 @@ def demo_seed(cfg):
             {"action": "INSERT", "id": "Mistral/Mistral-Small-3.2-24B/original", "unit": "(whole variant)", "nodes": 1, "rc": 1, "evicted": ["qwen3:14b"], "secs": 212, "ts": f"{now}T11:20:15",
              "note": "vLLM exited while loading: CUDA out of memory (max_model_len 32768 is too long for the memory left) — try a smaller max_model_len"}]
     with open(f"{s}/actions.jsonl", "w") as f: f.write("".join(json.dumps(h) + "\n" for h in hist))
+    dec = [58, 61, 0, 47, 66, 64, 72, 0, 63, 68, 295, 70, 66, 64]; pre = [1710, 1802, 0, 1420, 1836, 1795, 1903, 0, 1760, 1880, 2140, 1850, 1820, 1836]
+    _wjson(f"{s}/peaks.json", {time.strftime("%Y-%m-%d", time.localtime(time.time() - (13 - i) * 86400)): {"decode": d, "prefill": p}
+                               for i, (d, p) in enumerate(zip(dec, pre)) if d})
+    with open(f"{s}/bench.jsonl", "w") as f:
+        for kind, v, n in (("decode", 63.3, 256), ("prefill", 1836.0, 2014)):
+            f.write(json.dumps({"ts": f"{now}T08:40:00", "key": "TensorFold:Qwen3.8-Flash-Next", "engine": "TensorFold", "model": "Qwen3.8-Flash-Next",
+                                "kind": kind, "tok_s": v, "tokens": n, "secs": 4.0}) + "\n")
 
 
 # ── HTTP ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -960,6 +1158,7 @@ def make_handler(deck, token, page):
             u = urlparse(self.path).path
             if u == "/api/deck/insert": r = deck.insert(str(b.get("id") or ""), b.get("unit"), b.get("confirm_evict"))
             elif u == "/api/deck/eject": r = deck.eject(b.get("id") or None, bool(b.get("remove_local")))
+            elif u == "/api/deck/bench": r = deck.bench(str(b.get("kind") or ""))
             else: return self._send(404, {"error": "not found"})
             self._send(r.pop("status", 200) if "error" in r else 200, r)
     return H
@@ -1014,7 +1213,7 @@ def main(argv=None):
     if a.cmd == "summary": print(json.dumps(deck.summary(), indent=1)); return 0
     token = None if a.demo else read_token(cfg)
     host, port = a.listen or cfg["listen"], a.port or cfg["port"]
-    srv = ThreadingHTTPServer((host, port), make_handler(deck, token, page_html()))
+    srv = ThreadingHTTPServer((host, port), make_handler(deck, token, page_html())); deck.sampler(2 if a.demo else 5)
     print(f"mcc deck {VERSION} on http://{host}:{port}/" + ("  (DEMO MODE — nothing real is touched" + (", Ollama simulated as stopped)" if a.demo_no_ollama else ")") if a.demo else ""), file=sys.stderr)
     try: srv.serve_forever()
     except KeyboardInterrupt: pass

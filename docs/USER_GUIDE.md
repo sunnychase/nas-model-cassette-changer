@@ -144,6 +144,11 @@ python3 ~/.local/share/mcc/mcc_deck.py archs sglang
   count below it. The choice is remembered per browser; `#engine=vLLM` in the URL opens the page on one engine.
 - **Player:** what is loading or playing, what else is resident, and memory free. The reels turn only while a cassette is loading. A failed
   load shows *⚠ last load failed* with the reason until you dismiss it or a later load succeeds. **⏏ EJECT** stops the cassette.
+- **LLM server card (benchmarks), right of the tape:** live decode and prefill tok/s from the engine's own `/metrics` counters (vLLM, SGLang,
+  recipe lanes that set `metrics_path`), sparklines over the last 30 minutes, averages while busy, running requests, context, tokens
+  generated. **⏱ Decode** runs 256 tokens out and times them after the first token; **⇥ Prefill** sends ≈ 2,000 tokens and times the first
+  token (HTTP and queueing included, so it reads slightly low). Both work on Ollama via its own `eval_*` timings. A benchmark refuses while an
+  insert runs, and only one runs at a time. **Daily peak tok/s** shows 14 days of peaks (live or benchmark), decode or prefill.
 - **GPU nodes:** memory and disk on this box, everything resident in Ollama (protected models in green), any big lanes, and the status of other nodes.
 - **Filters:** search, category, format, tier, *new only*, and *insertable now* (hides everything the guard would refuse).
 - **Shelf:** one table per tier. For a GGUF with several quants, choose one in the **unit → nodes** menu; the *if you insert it now* column updates for that quant. It shows one of three outcomes:
@@ -297,7 +302,7 @@ No list for an engine (or a NAS index older than 1.3) means no check, as before.
 | `engines` | `["vllm", "sglang"]` | engines offered for safetensors models |
 | `vllm.*` | image, port 8010, 0.85, 32768, `trust_remote_code: false` | container settings |
 | `sglang.*` | image, port 30000, `mem_fraction_static` 0.85, `context_length` 32768, `trust_remote_code: false` | container settings |
-| `recipes_file` | `~/.config/mcc/recipes.json` | recipe lanes (§7.2); a missing file means there are none |
+| `recipes_file` | `~/.config/mcc/recipes.json` | recipe lanes (§7.2); a missing file means there are none. A recipe may add `metrics_path` (default `/metrics`) and `context` for the benchmark card |
 | `new_days` | `7` | how long the NEW badge lasts |
 | `engine_archs` | `{"vllm": "~/.config/mcc/vllm_archs.json", "sglang": "~/.config/mcc/sglang_archs.json"}` | per engine, the architecture list written by `mcc_deck.py archs`; a missing file = no check (§7.3) |
 
@@ -350,7 +355,8 @@ Every call except `/` and `/api/health` needs the header `X-Token: <token>`.
 | method | path | body | returns |
 |---|---|---|---|
 | GET | `/api/health` | | `{"ok": true, "version"}` |
-| GET | `/api/deck[?refresh=1]` | | full state: shelf (each row has `engines`), plans, slots, playing, history, `engine_bar`, `last_fail`, `arch_check` (`refresh` starts a background sync) |
+| GET | `/api/deck[?refresh=1]` | | full state: shelf (each row has `engines`), plans, slots, playing, history, `engine_bar`, `last_fail`, `arch_check`, `bench` (`refresh` starts a background sync) |
+| POST | `/api/deck/bench` | `{"kind": "decode" \| "prefill"}` | `{"started": true}`, or `409` while an insert or another benchmark runs, or nothing is loaded |
 | GET | `/api/deck/summary` | | counts per tier, NAS status |
 | GET | `/api/deck/log` | | the last copy/start log and the current job |
 | POST | `/api/deck/insert` | `{"id", "unit", "confirm_evict": [names]}` (`unit` = a key from the row's `units`, e.g. `"(whole variant) · SGLang"`) | `{"started": true}`, or `409 {"error", "would_evict"}` |

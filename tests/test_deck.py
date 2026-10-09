@@ -311,5 +311,63 @@ class CassetteSelector(unittest.TestCase):
         self.assertEqual(st["last_fail"]["id"], "Mistral/Mistral-Small-3.2-24B/original"); self.assertEqual(st["arch_check"], ["sglang", "vllm"])
 
 
+class Benchmarks(unittest.TestCase):
+    """v1.3: live tok/s from the engine's counters, Decode / Prefill runs, daily peaks."""
+    PROM = ('# HELP x\nvllm:generation_tokens_total{model_name="a"} 1000\nvllm:generation_tokens_total{model_name="b"} 500\n'
+            'vllm:prompt_tokens_total{model_name="a"} 9000\nvllm:num_requests_running{model_name="a"} 2\nother_metric 7\n')
+
+    def test_parse_prom_sums_label_sets(self):
+        self.assertEqual(D.parse_prom(self.PROM), {"gen": 1500.0, "prompt": 9000.0, "running": 2.0})
+        self.assertEqual(D.parse_prom("sglang:generation_tokens_total 12\nsglang:num_running_reqs 1"), {"gen": 12.0, "running": 1.0})
+        self.assertEqual(D.parse_prom(None), {})
+
+    def test_rates(self):
+        self.assertEqual(D.rates((0, {"gen": 100, "prompt": 1000}), (5, {"gen": 400, "prompt": 10000})), (60.0, 1800.0))
+        self.assertIsNone(D.rates(None, (5, {"gen": 1})))
+        self.assertIsNone(D.rates((0, {"gen": 500}), (5, {"gen": 10})))                    # counter reset = engine restart
+        self.assertIsNone(D.rates((5, {"gen": 1}), (5, {"gen": 2})))
+
+    def test_bump_peak_keeps_max_and_window(self):
+        pk = {}
+        D.bump_peak(pk, "2026-10-01", "decode", 50); D.bump_peak(pk, "2026-10-01", "decode", 40); D.bump_peak(pk, "2026-10-01", "decode", 0)
+        self.assertEqual(pk["2026-10-01"]["decode"], 50)
+        for i in range(2, 40): D.bump_peak(pk, f"2026-10-{i:02d}", "prefill", i)
+        self.assertEqual(len(pk), 30); self.assertNotIn("2026-10-01", pk)
+
+    def test_bench_prompts_defeat_caches(self):
+        self.assertNotEqual(D.bench_prompt("prefill", "a"), D.bench_prompt("prefill", "b"))
+        self.assertGreater(len(D.bench_prompt("prefill", "a").split()), 1500)
+
+    def _tf_deck(self):
+        root = tempfile.mkdtemp(); c = cfg(state_dir=f"{root}/s", local_dir=f"{root}/d", protected=["qwen3:14b"])
+        c["_recipes"] = {k: {**D.RECIPE_DEFAULTS, **v, "key": k} for k, v in D.DEMO_RECIPES.items()}
+        D.demo_seed(c); deck = D.Deck(c, D.DemoSystem(c, ollama_up=False))
+        self.assertTrue(deck.insert("Qwen/Qwen3.8-Flash-Next/Vontra-MLX-4bit-MTP").get("started"))
+        for _ in range(200):
+            if not deck.job["running"]: break
+            time.sleep(0.05)
+        return deck
+
+    def test_live_samples_and_bench_on_tensorfold(self):
+        deck = self._tf_deck(); t = deck.target()
+        self.assertEqual((t["engine"], t["model"], t["port"]), ("TensorFold", "Qwen3.8-Flash-Next", 8888))
+        self.assertIsNone(deck.sample())                                                  # the first sample has nothing to compare with
+        time.sleep(0.2); r = deck.sample(); self.assertIsNotNone(r); self.assertGreater(r[0], 0)
+        b = deck.bench_state(); self.assertEqual(b["live"]["now_decode"], r[0]); self.assertEqual(b["last"]["decode"]["tok_s"], 63.3)
+        self.assertEqual(len(b["daily"]), 14)
+        self.assertTrue(deck.bench("decode").get("started")); self.assertEqual(deck.bench("decode")["status"], 409)   # one at a time
+        for _ in range(100):
+            if not deck.bjob["running"]: break
+            time.sleep(0.05)
+        last = deck.bench_state()["last"]["decode"]; self.assertEqual((last["tok_s"], last["runs"], last["best"]), (61.8, 2, 63.3))
+        self.assertEqual(deck.bench("warp")["status"], 400)
+
+    def test_bench_refuses_with_nothing_loaded(self):
+        root = tempfile.mkdtemp(); c = cfg(state_dir=f"{root}/s", local_dir=f"{root}/d")
+        deck = D.Deck(c, D.DemoSystem(c, ollama_up=False))
+        self.assertIsNone(deck.target()); self.assertIn("nothing is loaded", deck.bench("decode")["error"])
+        self.assertIsNone(deck.bench_state()["live"])
+
+
 if __name__ == "__main__":
     unittest.main()

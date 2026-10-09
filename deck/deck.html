@@ -17,8 +17,18 @@ a{color:var(--acc)}h1{font-size:17px;letter-spacing:.14em;margin:0}
 .new{background:#14532d;color:#bbf7d0;border-color:#166534}.loc{background:#0c2a4a;color:#bae6fd;border-color:#0c4a6e}
 .dim{color:var(--dim)}.ok{color:#22c55e}.warnc{color:var(--warn)}
 .top{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin:12px 0}
-.player{display:grid;grid-template-columns:minmax(240px,340px) 1fr;gap:16px;align-items:center}
+.player{display:grid;grid-template-columns:minmax(220px,320px) minmax(0,1fr) minmax(320px,430px);gap:16px;align-items:center}
+@media(max-width:1180px){.player{grid-template-columns:minmax(220px,320px) minmax(0,1fr)}.bench{grid-column:1/-1}}
 @media(max-width:700px){.player{grid-template-columns:1fr}}
+.bench{border:1px solid var(--bd);border-radius:10px;padding:12px;background:var(--card2);align-self:stretch}
+.bhd{display:flex;align-items:center;gap:8px;justify-content:space-between}.bhd b{letter-spacing:.08em;font-size:12.5px}
+.bmodel{background:#0b1220;border:1px solid var(--bd);border-radius:8px;padding:7px 10px;margin:8px 0;font:12px ui-monospace,Menlo,monospace;word-break:break-all}
+.bcols{display:grid;grid-template-columns:1fr 1fr;gap:12px}.bnum{font-size:26px;font-weight:700;line-height:1.1}.bnum small{font-size:12px;color:var(--dim);font-weight:500;margin-left:4px}
+.btiles{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0}.btile{background:#0b1220;border:1px solid var(--bd);border-radius:8px;padding:6px 8px}
+.btile b{display:block;font-size:14px}.btile span{font-size:10.5px;color:var(--dim)}
+.bbtn{display:flex;gap:6px;flex-wrap:wrap}.bbtn button{flex:1}.bars{display:flex;align-items:flex-end;gap:3px;height:46px;margin-top:4px}
+.bars i{flex:1;background:#f59e0b;border-radius:2px 2px 0 0;min-height:2px}.bars i.p{background:#38b6ff}.bars i.z{background:#1f2937}
+.lnk{cursor:pointer;color:var(--dim)}.lnk.on{color:#f59e0b;font-weight:600}.lnk.on.p{color:#38b6ff}
 .player svg{width:100%;max-width:340px;display:block;margin:auto}
 .pl-k{font-size:11px;letter-spacing:.16em;color:var(--dim)}.pl-t{font-size:18px;font-weight:700;margin:2px 0;word-break:break-word}.pl-also{margin-top:8px}
 .engbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:10px 0 0;padding:7px 10px;background:var(--card);border:1px solid var(--bd);border-radius:8px}
@@ -119,7 +129,7 @@ async function api(path,body){const o={headers:{"X-Token":TOKEN}};if(body){o.met
  let r=await fetch(path,o);if(r.status==403){const t=prompt("Access token (from ~/.config/mcc/token on the GPU box):");if(!t)throw new Error("no token");TOKEN=t.trim();try{localStorage.setItem("mcc_token",TOKEN)}catch(e){};o.headers["X-Token"]=TOKEN;r=await fetch(path,o);}
  return [r.status,await r.json()];}
 async function load(force){try{const [s,d]=await api("/api/deck"+(force?"?refresh=1":""));if(s!=200){$("n").textContent=d.error||("HTTP "+s);return;}D=d;draw();logPoll();}catch(e){$("n").textContent="load failed: "+e.message;}
- clearTimeout(timer);timer=setTimeout(()=>load(0),D&&(D.job.running||D.syncing)?3000:30000);}
+ clearTimeout(timer);timer=setTimeout(()=>load(0),D&&(D.job.running||D.syncing||((D.bench||{}).job||{}).running)?3000:D&&(D.bench||{}).live?5000:30000);}
 async function logPoll(){try{const [,l]=await api("/api/deck/log");const hist=(D.history||[]).slice().reverse().map(h=>`${h.ts.replace("T"," ")}  ${h.action}  ${h.id||""}${h.unit?" ["+h.unit+"]":""}${h.rc!==undefined?"  rc="+h.rc:""}${(h.evicted||[]).length?"  evicted "+h.evicted.join(", "):""}${h.note?"  — "+h.note:""}`).join("\n");
  $("log").textContent=(l.log?l.log.trim().split("\n").slice(-14).join("\n")+"\n\n":"")+"── history ──\n"+(hist||"(none yet)");}catch(e){}}
 function hdr(){const nas=D.nas||{},t=D.tiers||{};const built=esc((D.library_built||"?").replace("T"," ").slice(0,16));
@@ -152,7 +162,30 @@ function tape(){const R=D.residents||{},p=D.playing||{},j=D.job||{},oll=(R.ollam
  <path d="M60 204 L84 176 L256 176 L280 204" fill="#0b1220" stroke="#334155"/><circle cx="108" cy="190" r="4" fill="#334155"/><circle cx="232" cy="190" r="4" fill="#334155"/></svg>
  <div>${fail}<div class=pl-k>${load?"⏳ ":on?"▶ ":"⏹ "}${mode}</div><div class=pl-t>${esc(title)}</div><div class=dim>${esc(sub)}</div>
  ${also.length?`<div class=pl-also><span class=pl-k>ALSO LOADED</span> ${also.map(n=>`<span class="chip${(D.protected||[]).includes(n)?" prot":""}">${esc(n)}</span>`).join(" ")}</div>`:""}
- <div class=row style="margin-top:10px">${p.id||eng.length?`<button class="warn" onclick="eject()">⏏ EJECT</button>`:""}${p.unit?`<span class=why>${esc(p.unit)}</span>`:""}<span class=why>memory ${R.mem_avail_gib??"?"}/${R.mem_total_gib??"?"} GiB free</span></div></div>`;}
+ <div class=row style="margin-top:10px">${p.id||eng.length?`<button class="warn" onclick="eject()">⏏ EJECT</button>`:""}${p.unit?`<span class=why>${esc(p.unit)}</span>`:""}<span class=why>memory ${R.mem_avail_gib??"?"}/${R.mem_total_gib??"?"} GiB free</span></div></div>${benchCard()}`;}
+let BK=LS("mcc_bk","decode");function setBK(k){BK=k;SS("mcc_bk",k);draw();}
+const fmtN=v=>v==null?"—":v>=1000?Math.round(v).toLocaleString():(Math.round(v*10)/10).toFixed(1);
+const ago=s=>s==null?"never":s<90?`${s}s ago`:s<5400?`${Math.round(s/60)}m ago`:`${Math.round(s/3600)}h ago`;
+function spark(v,col){if(!v||v.length<2)return `<svg viewBox="0 0 160 34" width="100%" height="34"><line x1="0" y1="30" x2="160" y2="30" stroke="#334155" stroke-dasharray="3 3"/></svg>`;
+ const mx=Math.max(...v,1),pts=v.map((y,i)=>`${(i/(v.length-1)*156+2).toFixed(1)},${(31-y/mx*27).toFixed(1)}`);const last=pts[pts.length-1].split(",");
+ return `<svg viewBox="0 0 160 34" width="100%" height="34" aria-hidden="true"><polyline points="${pts.join(" ")}" fill="none" stroke="${col}" stroke-width="1.6"/><circle cx="${last[0]}" cy="${last[1]}" r="3" fill="${col}"/></svg>`;}
+function benchCard(){const B=D.bench||{},t=B.target,L=B.live,J=B.job||{},last=B.last||{};
+ if(!t)return `<div class=bench><div class=bhd><b>⚙ BENCHMARKS</b></div><div class=why style="margin-top:10px">Nothing loaded. Insert a cassette, then measure it here: live decode / prefill tok/s from the engine's own counters, and Decode / Prefill benchmark runs.</div>${daily(B)}</div>`;
+ const col=(k,c)=>{const n=L?L["now_"+k]:null,a=L?L["avg_"+k]:null,lb=last[k];
+  return `<div><div class=pl-k>${k.toUpperCase()}</div><div class=bnum>${L?fmtN(n):"—"}<small>tok/s</small></div>${spark(L&&L[k],c)}<div class=why>${L?"avg "+fmtN(a):"no live counters"}${lb?` · bench <b style="color:var(--tx)">${fmtN(lb.tok_s)}</b>${lb.runs>1?" (best "+fmtN(lb.best)+")":""}`:""}</div></div>`;};
+ const st=L?(L.running?`<span class=ok>Serving · ${L.running} running${L.waiting?" · "+L.waiting+" waiting":""}</span>`:`Idle · last served ${ago(L.idle_s)}`):(t.engine=="Ollama"?"Ollama keeps no live counters — run a benchmark":"waiting for the engine's /metrics…");
+ const busy=J.running||(D.job||{}).running;
+ return `<div class=bench><div class=bhd><b>⚙ LLM SERVER</b><span class="chip eng">${esc(t.engine)}${t.port?" · :"+esc(t.port):""}</span></div>
+  <div class=bmodel><span class=pl-k>MODEL</span><br>${esc(t.model)}</div>
+  <div class=bcols>${col("decode","#f59e0b")}${col("prefill","#38b6ff")}</div><div class=why style="margin-top:4px">${st}</div>
+  <div class=btiles><div class=btile><b>${L&&L.running!=null?L.running:"—"}</b><span>Running</span></div><div class=btile><b>${t.context?fmtN(t.context):"—"}</b><span>Context</span></div>
+   <div class=btile><b>${esc(t.engine)}</b><span>Engine</span></div><div class=btile><b>${L?fmtN(L.generated):"—"}</b><span>Generated</span></div></div>
+  <div class=bbtn><button class=ghost ${busy?"disabled":""} onclick="bench('decode')" title="256 tokens out, timed after the first token">⏱ Decode</button><button class=ghost ${busy?"disabled":""} onclick="bench('prefill')" title="≈2,000 tokens in, time to the first token">⇥ Prefill</button></div>
+  ${J.running||J.msg?`<div class="why ${J.running?"warnc":""}" style="margin-top:5px">${J.running?"⏳ ":""}${esc(J.msg)}</div>`:""}${daily(B)}</div>`;}
+function daily(B){const d=B.daily||[],k=BK,mx=Math.max(1,...d.map(x=>x[k]||0)),pk=Math.max(0,...d.map(x=>x[k]||0));
+ return `<div style="margin-top:10px;border-top:1px solid var(--bd);padding-top:8px"><div class=bhd><span class=pl-k>DAILY PEAK TOK/S</span><span class=why><span class="lnk ${k=="decode"?"on":""}" onclick="setBK('decode')">decode</span> · <span class="lnk p ${k=="prefill"?"on":""}" onclick="setBK('prefill')">prefill</span> · 14d</span></div>
+  <div class=why>${pk?"peak "+fmtN(pk)+" tok/s":"no measurements yet"}</div><div class=bars>${d.map(x=>`<i class="${x[k]?(k=="prefill"?"p":""):"z"}" style="height:${x[k]?Math.max(4,x[k]/mx*100):4}%" title="${esc(x.day)}: ${x[k]?fmtN(x[k])+" tok/s":"—"}"></i>`).join("")}</div></div>`;}
+async function bench(kind){const [s,r]=await api("/api/deck/bench",{kind});if(r.error)alert(r.error);load(0);}
 function slots(){$("slots").innerHTML=(D.slots||[]).map(s=>{if(!s.online)return `<div class="slot off"><b>${esc(s.name)}</b> <span class=dim>${esc(s.note||"")}</span><div class=dim>offline — ${esc(s.why||"")}</div></div>`;
  if(!s.self)return `<div class="slot"><b>${esc(s.name)}</b> <span class=dim>${esc(s.note||"")}</span><div class=dim>online · ${s.mem_avail_gib??"?"} GiB free</div><div class=why>multi-node units launch from their kit</div></div>`;
  const used=s.mem_total_gib?Math.max(0,Math.min(100,100*(1-s.mem_avail_gib/s.mem_total_gib))):0;
