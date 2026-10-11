@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""mcc_deck.py — the GPU-box side of the NAS Model Cassette Changer.
+"""mcc_deck.py — the GPU-box side of Lion AI Models · Professional Model Suite (the NAS Model Cassette Changer).
+Created by Sunny Chase (https://github.com/sunnychase) in collaboration with Claude (Anthropic).
 
 Your models live on a NAS. Your GPU box has fast local disk and limited memory. The deck treats every model on the NAS
 like a cassette on a shelf:
@@ -29,7 +30,7 @@ import argparse, collections, glob, hmac, json, os, re, secrets, shlex, shutil, 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-VERSION = "1.3.1"
+VERSION = "1.4.0"
 HOME = os.path.expanduser("~")
 
 DEFAULTS = {

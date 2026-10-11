@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0 — Lion AI Models · Professional Model Suite
+- **New interface:** sidebar of sections (Now playing, Engines, GPU nodes, Models, Local copies, Deck log) with scroll highlighting, a clean
+  header, charcoal-and-gold palette, calmer cards, tables and buttons. Same markup ids and the same script: every control and API is unchanged.
+- **Phones:** the sidebar becomes a scrolling top bar; model rows become stacked cards with a full-width PLAY button.
+- Still one self-contained `deck.html` (no build step, no external assets; Inter is used when installed, otherwise the system font).
+- **README:** Hardware required and Prerequisites sections; credits. New screenshots of every view.
+- Created by Sunny Chase (https://github.com/sunnychase) in collaboration with Claude (Anthropic); credited in LICENSE and the code headers.
+
 ## 1.3.1
 - **Fix: the Ollama benchmark no longer disturbs the model it measures.** 1.3.0 sent `num_ctx` (a different context makes Ollama reload the
   model) and no `keep_alive` (so a model pinned with `keep_alive: -1` fell back to the 5-minute default and could unload). It now sends no

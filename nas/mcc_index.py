@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""mcc_index.py — the NAS side of the NAS Model Cassette Changer.
+"""mcc_index.py — the NAS side of Lion AI Models · Professional Model Suite (the NAS Model Cassette Changer).
+Created by Sunny Chase (https://github.com/sunnychase) in collaboration with Claude (Anthropic).
 
 Walks the folders you download models into ("staging"), works out what each model is, and publishes:
 

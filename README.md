@@ -1,8 +1,10 @@
-# 📼 NAS Model Cassette Changer
+# Lion AI Models · Professional Model Suite
+
+*The NAS Model Cassette Changer, redesigned. Created by [Sunny Chase](https://github.com/sunnychase) in collaboration with Claude (Anthropic).*
 
 **Keep every AI model you own on a NAS. Play any of them on your GPU box with one click, without ever knocking out the model you are using.**
 
-![The deck playing Qwen3.8-Flash-Next in a TensorFold lane, with live benchmarks](docs/images/screenshot-playing.png)
+![Lion AI Models playing Qwen3.8-Flash-Next in a TensorFold lane, with the LLM server card and GPU nodes](docs/images/screenshot-playing.png)
 
 Local models are huge. A GPU box has a fast but small disk; a NAS has lots of cheap space but is far too slow to serve from. The NAS Model Cassette Changer treats every model like a cassette on a shelf:
 
@@ -10,6 +12,14 @@ Local models are huge. A GPU box has a fast but small disk; a NAS has lots of ch
 - **The deck (GPU box)**: a web page lists the whole shelf. Press **INSERT** and it copies the model to local NVMe and starts it: in **Ollama** (GGUF), in a **vLLM** or **SGLang** container (safetensors, your choice per model), or with the model's own **recipe lane** (for example a **TensorFold** serving recipe).
 - **The guard**: an insert never stops anything you didn't name. If loading a model would evict something, the deck lists exactly what would stop and waits until you tick every name. Models you mark as *protected* keep their memory reserved even when they are unloaded.
 - **The ejector**: stops the cassette and, if you ask, deletes the local copy. The NAS copy is never touched.
+
+## What's new in 1.4: Lion AI Models
+
+- **A new, professional interface:** a sidebar with sections (Now playing · Engines · GPU nodes · Models · Local copies · Deck log) that
+  highlight as you scroll, a clean header, a charcoal-and-gold palette, calmer cards and tables, and gold primary actions.
+- **Better on a phone:** the sidebar becomes a scrolling top bar, and every model row turns into a stacked card with a full-width PLAY button.
+- **Same engine underneath:** every control, id and API is unchanged; the page is still one self-contained file with no build step and no
+  external assets.
 
 ## The cassette selector (v1.3)
 
@@ -115,6 +125,39 @@ This is an estimate and a *floor*. Every constant is in the config, so you can t
 
 ![demo library](docs/images/demo-library.png)
 
+## Hardware required
+
+| | Minimum | Developed and tested on |
+|---|---|---|
+| **GPU box** | Linux with an NVIDIA GPU (or Apple silicon for recipe lanes), enough fast local disk to hold the models you play | **NVIDIA DGX Spark** (GB10, 128 GB unified memory, aarch64, 4 TB NVMe) |
+| **NAS** | Any always-on Linux machine with enough storage for your model library | Ubuntu Server 24.04 on a 4-bay NAS, one 20 TB drive (19 TB XFS) |
+| **Network** | Gigabit Ethernet (about 110 MB/s, so a 60 GB model takes ~10 min) | **10 GbE** between the NAS and the GPU box (see below) |
+| **Optional** | A NAS network card with Wake-on-LAN, if you let the NAS sleep | |
+
+- The node-count estimate defaults to **128 GB unified-memory nodes** (a DGX Spark). For other cards, change the per-node budget and overheads
+  in `deck.json` (see [How the node count is estimated](#how-the-node-count-is-estimated)).
+- Local disk: a GGUF cassette needs about **2.2 × its size** while it is created (Ollama writes a copy); safetensors about **1.1 ×**.
+- Several GPU nodes (up to four) are shown in the GPU-nodes panel. The deck only *inserts* single-node models; bigger ones keep their tier.
+
+## Prerequisites
+
+**GPU box**
+- Linux, **Python 3.9+** (standard library only: nothing to `pip install`), `ssh`, `rsync`, systemd user services.
+- Key-based **ssh** access to the NAS (an alias in `~/.ssh/config`).
+- At least one engine:
+  - [Ollama](https://ollama.com) for GGUF models;
+  - **Docker + NVIDIA Container Toolkit** for the vLLM / SGLang images (safetensors);
+  - optional **recipe lanes** such as a TensorFold serving recipe (from its own repository, under its own licence).
+- A browser on your network. The deck listens on `127.0.0.1:8099` with a token; put a reverse proxy with authentication in front if you
+  reach it from elsewhere (see [SECURITY.md](SECURITY.md)).
+
+**NAS**
+- Linux, **Python 3.9+**, an **ssh** server, and `rsync`.
+- Your model folders on local disk. The indexer only *reads* them and publishes a symlink library plus `library.json`.
+- systemd, for the 10-minute index timer.
+
+**Accounts and keys:** none. Download models however you like (for example `huggingface-cli`). The deck never contacts a model hub.
+
 ## Quick start (real hardware)
 
 **On the NAS** (any Linux box holding your model folders):
@@ -158,6 +201,11 @@ scripts/                  install-nas.sh, install-deck.sh
 tests/                    python -m unittest discover -s tests
 docs/                     USER_GUIDE.md, images, and the scripts that draw them
 ```
+
+## Credits
+
+Created by **[Sunny Chase](https://github.com/sunnychase)** in collaboration with **Claude** (Anthropic).
+Ollama, vLLM, SGLang and TensorFold are separate projects under their own licences; the deck only starts and stops them.
 
 ## License
 
