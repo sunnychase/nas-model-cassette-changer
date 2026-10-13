@@ -18,6 +18,17 @@ Keep every AI model you own on a NAS. Play any of them on your GPU box with one 
   <a href="https://github.com/sunnychase/nas-model-cassette-changer"><img src="https://img.shields.io/github/stars/sunnychase/nas-model-cassette-changer?style=flat-square" alt="GitHub stars"></a>
 </p>
 
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#engines">Engines</a> ·
+  <a href="#whats-new-in-14-lion-ai-models">What's new</a> ·
+  <a href="#screenshots">Screenshots</a> ·
+  <a href="#faq">FAQ</a> ·
+  <a href="#documentation">Documentation</a> ·
+  <a href="#contributing">Contributing</a>
+</p>
+
 <p align="center"><img src="docs/images/screenshot-playing.png" width="100%" alt="Lion AI Models playing Qwen3.8-Flash-Next in a TensorFold lane, with the LLM server card and GPU nodes"></p>
 
 Local models are huge. A GPU box has a fast but small disk; a NAS has lots of cheap space but is far too slow to serve from. The NAS Model Cassette Changer treats every model like a cassette on a shelf:
@@ -26,6 +37,148 @@ Local models are huge. A GPU box has a fast but small disk; a NAS has lots of ch
 - **The deck (GPU box)**: a web page lists the whole shelf. Press **INSERT** and it copies the model to local NVMe and starts it: in **Ollama** (GGUF), in a **vLLM** or **SGLang** container (safetensors, your choice per model), or with the model's own **recipe lane** (for example a **TensorFold** serving recipe).
 - **The guard**: an insert never stops anything you didn't name. If loading a model would evict something, the deck lists exactly what would stop and waits until you tick every name. Models you mark as *protected* keep their memory reserved even when they are unloaded.
 - **The ejector**: stops the cassette and, if you ask, deletes the local copy. The NAS copy is never touched.
+
+## Quick start
+
+### Download
+
+```bash
+git clone https://github.com/sunnychase/nas-model-cassette-changer.git
+cd nas-model-cassette-changer
+```
+
+Or download the ZIP: **Code → Download ZIP** on the GitHub page, or grab a tagged release from the **Releases** tab.
+
+### Try it in 10 seconds (no NAS, no GPU)
+
+```bash
+python3 deck/mcc_deck.py serve --demo
+# open http://127.0.0.1:8099/
+```
+
+Demo mode fakes a 35-model NAS and a 128 GB GPU box. Insert, eject, the guard dialog and the log all work; nothing on your machine is touched. Add `--demo-no-ollama` to simulate a box with Ollama stopped, so you can play the TensorFold recipe row.
+
+### On real hardware
+
+**On the NAS** (any Linux box holding your model folders):
+
+```bash
+sudo scripts/install-nas.sh                 # installs mcc_index.py + a 10-minute systemd timer
+sudoedit /etc/mcc/nas.json                   # where your model folders are
+python3 /usr/local/bin/mcc_index.py --dry-run
+sudo systemctl enable --now mcc-index.timer
+```
+
+**On the GPU box:**
+
+```bash
+scripts/install-deck.sh                      # per-user install, no root
+$EDITOR ~/.config/mcc/deck.json              # ssh alias of the NAS, its library path, protected models
+python3 ~/.local/share/mcc/mcc_deck.py sync  # first copy of the index
+systemctl --user enable --now mcc-sync.timer mcc-deck.service
+```
+
+Open `http://127.0.0.1:8099/` and paste the token from `~/.config/mcc/token`.
+
+The full walkthrough is in the **[User Guide](docs/USER_GUIDE.md)**. It covers folder layouts, every config key, the guard rules, remote access, troubleshooting and the API.
+
+### Hardware required
+
+| | Minimum | Developed and tested on |
+|---|---|---|
+| **GPU box** | Linux with an NVIDIA GPU (or Apple silicon for recipe lanes), enough fast local disk to hold the models you play | **NVIDIA DGX Spark** (GB10, 128 GB unified memory, aarch64, 4 TB NVMe) |
+| **NAS** | Any always-on Linux machine with enough storage for your model library | Ubuntu Server 24.04 on a 4-bay NAS, one 20 TB drive (19 TB XFS) |
+| **Network** | Gigabit Ethernet (about 110 MB/s, so a 60 GB model takes ~10 min) | **10 GbE** between the NAS and the GPU box (see [Use 10 GbE](#use-10-gbe-between-the-nas-and-the-gpu-box)) |
+| **Optional** | A NAS network card with Wake-on-LAN, if you let the NAS sleep | |
+
+- The node-count estimate defaults to **128 GB unified-memory nodes** (a DGX Spark). For other cards, change the per-node budget and overheads
+  in `deck.json` (see [How the node count is estimated](#how-the-node-count-is-estimated)).
+- Local disk: a GGUF cassette needs about **2.2 × its size** while it is created (Ollama writes a copy); safetensors about **1.1 ×**.
+- Several GPU nodes (up to four) are shown in the GPU-nodes panel. The deck only *inserts* single-node models; bigger ones keep their tier.
+
+### Prerequisites
+
+**GPU box**
+- Linux, **Python 3.9+** (standard library only: nothing to `pip install`), `ssh`, `rsync`, systemd user services.
+- Key-based **ssh** access to the NAS (an alias in `~/.ssh/config`).
+- At least one engine:
+  - [Ollama](https://ollama.com) for GGUF models;
+  - **Docker + NVIDIA Container Toolkit** for the vLLM / SGLang images (safetensors);
+  - optional **recipe lanes** such as a TensorFold serving recipe (from its own repository, under its own licence).
+- A browser on your network. The deck listens on `127.0.0.1:8099` with a token; put a reverse proxy with authentication in front if you
+  reach it from elsewhere (see [SECURITY.md](SECURITY.md)).
+
+**NAS**
+- Linux, **Python 3.9+**, an **ssh** server, and `rsync`.
+- Your model folders on local disk. The indexer only *reads* them and publishes a symlink library plus `library.json`.
+- systemd, for the 10-minute index timer.
+
+**Accounts and keys:** none. Download models however you like (for example `huggingface-cli`). The deck never contacts a model hub.
+
+## How it works
+
+```
+ browser (desktop or phone)
+        │  http://127.0.0.1:8099 + token
+        ▼
+ the deck ── deck/mcc_deck.py on the GPU box: one Python file, standard library only; the page, the guard, INSERT and EJECT
+        │
+        ├── sync, every 10 min ... ssh (BatchMode): copies library.json and the .gguf list; never wakes a sleeping NAS
+        ├── INSERT ............... rsync --partial from the NAS to local NVMe (~/models/deck), then starts the engine
+        └── engines .............. Ollama (GGUF) · a vLLM or SGLang container (safetensors) · recipe lanes (e.g. TensorFold)
+
+ the NAS ── nas/mcc_index.py, every 10 min: catalogues the model folders, builds the library/ symlinks, tiers and kits,
+            and writes library.json; the deck only ever reads from it
+```
+
+Before an INSERT touches anything, the guard plans it: is the unit servable, does it fit on one node, does it fit in memory
+beside what is running (protected models keep their reserve), and, for a safetensors model, can the engine image load its
+architecture. If the plan would stop or evict anything, the deck names every one and waits until you confirm each name. The
+plan is checked again after the copy, and if a GGUF load pushes out a protected model anyway, the new cassette is unloaded.
+One GPU engine plays at a time. Everything machine-specific (the NAS's ssh alias and library path, protected models, ports,
+the fit constants) lives in `~/.config/mcc/deck.json` on the GPU box and `/etc/mcc/nas.json` on the NAS.
+
+It is two plain Python files with **no dependencies** beyond the standard library, plus `ssh`, `rsync`, Ollama and/or Docker on the GPU box.
+
+### How it fits together
+
+![architecture](docs/images/architecture.png)
+
+### How the node count is estimated
+
+Each runnable unit (one GGUF quant, or one whole safetensors folder) gets the smallest node count *k* for which the weights plus per-node overhead fit:
+
+`max(W + 5.6·k + 8, 1.15·W) ≤ 95.69·k`  (GiB, W = weights; defaults are tuned for a 128 GB unified-memory node)
+
+![fit chart](docs/images/fit-chart.png)
+
+This is an estimate and a *floor*. Every constant is in the config, so you can tune it for your own cards. The deck itself only inserts single-node units; anything bigger is shown with its tier and any matching multi-node "kit" (a serving recipe kept on the NAS).
+
+![demo library](docs/images/demo-library.png)
+
+## Engines
+
+| Model on the NAS | Played by | How |
+|---|---|---|
+| GGUF (any quant, split shards, vision projector) | **Ollama** | `ollama create deck/<name>` + warm load at a fixed context |
+| safetensors | **vLLM** | `vllm/vllm-openai` container on :8010 |
+| safetensors | **SGLang** | `lmsysorg/sglang` container on :30000 |
+| anything listed in `recipes.json` | **its recipe lane**, e.g. **TensorFold** | the recipe's own `start.sh` / `stop.sh`, health-checked |
+| EXL3 / EXL2 | *listed under EXL3, not played yet* | needs an exllamav3 / TabbyAPI player; the selector shows them so you know they are there |
+
+One GPU engine at a time: a vLLM, SGLang or recipe cassette must be ejected before another one is inserted. Recipe lanes such as TensorFold state their own memory need, and the deck checks it before stopping anything. If the recipe needs Ollama stopped, the deck says so and waits for you; it never stops a system service itself. See the [User Guide §7](docs/USER_GUIDE.md#7-engines-and-recipe-lanes-sglang-tensorfold).
+
+## Use 10 GbE between the NAS and the GPU box
+
+Every INSERT is a full copy of the model, so the link sets how long you wait:
+
+| Link | Real-world copy rate | 20 GB GGUF | 65 GB safetensors | 113 GB model |
+|---|---|---|---|---|
+| 1 GbE | ~110 MB/s | ~3 min | ~10 min | ~17 min |
+| 2.5 GbE | ~280 MB/s | ~1.2 min | ~4 min | ~7 min |
+| **10 GbE** | **~800–1100 MB/s** | **~20–25 s** | **~1–1.5 min** | **~2 min** |
+
+**A 10 GbE link (NICs on both boxes and a 10 GbE switch or a direct cable) is strongly recommended.** It only pays off if the NAS disks can keep up: one hard drive tops out around 150–250 MB/s. Use several drives, an SSD/NVMe pool or a read cache on the NAS. Ejecting is instant either way (it stops the model and, if you ask, deletes the local copy), and with a fast link re-inserting a model you deleted takes about a minute.
 
 ## What's new in 1.4: Lion AI Models
 
@@ -63,52 +216,6 @@ To the right of the cassette, the **LLM server** card measures whatever is loade
 Results are kept in `bench.jsonl` / `peaks.json` in the state dir. Quality and tool-use evals are not part of this build.
 <br clear="right">
 
-It is two plain Python files with **no dependencies** beyond the standard library, plus `ssh`, `rsync`, Ollama and/or Docker on the GPU box.
-
-## Engines
-
-| Model on the NAS | Played by | How |
-|---|---|---|
-| GGUF (any quant, split shards, vision projector) | **Ollama** | `ollama create deck/<name>` + warm load at a fixed context |
-| safetensors | **vLLM** | `vllm/vllm-openai` container on :8010 |
-| safetensors | **SGLang** | `lmsysorg/sglang` container on :30000 |
-| anything listed in `recipes.json` | **its recipe lane**, e.g. **TensorFold** | the recipe's own `start.sh` / `stop.sh`, health-checked |
-| EXL3 / EXL2 | *listed under EXL3, not played yet* | needs an exllamav3 / TabbyAPI player; the selector shows them so you know they are there |
-
-One GPU engine at a time: a vLLM, SGLang or recipe cassette must be ejected before another one is inserted. Recipe lanes such as TensorFold state their own memory need, and the deck checks it before stopping anything. If the recipe needs Ollama stopped, the deck says so and waits for you; it never stops a system service itself. See the [User Guide §7](docs/USER_GUIDE.md#7-engines-and-recipe-lanes-sglang-tensorfold).
-
-## Use 10 GbE between the NAS and the GPU box
-
-Every INSERT is a full copy of the model, so the link sets how long you wait:
-
-| Link | Real-world copy rate | 20 GB GGUF | 65 GB safetensors | 113 GB model |
-|---|---|---|---|---|
-| 1 GbE | ~110 MB/s | ~3 min | ~10 min | ~17 min |
-| 2.5 GbE | ~280 MB/s | ~1.2 min | ~4 min | ~7 min |
-| **10 GbE** | **~800–1100 MB/s** | **~20–25 s** | **~1–1.5 min** | **~2 min** |
-
-**A 10 GbE link (NICs on both boxes and a 10 GbE switch or a direct cable) is strongly recommended.** It only pays off if the NAS disks can keep up: one hard drive tops out around 150–250 MB/s. Use several drives, an SSD/NVMe pool or a read cache on the NAS. Ejecting is instant either way (it stops the model and, if you ask, deletes the local copy), and with a fast link re-inserting a model you deleted takes about a minute.
-
----
-
-## Download
-
-```bash
-git clone https://github.com/sunnychase/nas-model-cassette-changer.git
-cd nas-model-cassette-changer
-```
-
-Or download the ZIP: **Code → Download ZIP** on the GitHub page, or grab a tagged release from the **Releases** tab.
-
-## Try it in 10 seconds (no NAS, no GPU)
-
-```bash
-python3 deck/mcc_deck.py serve --demo
-# open http://127.0.0.1:8099/
-```
-
-Demo mode fakes a 35-model NAS and a 128 GB GPU box. Insert, eject, the guard dialog and the log all work; nothing on your machine is touched. Add `--demo-no-ollama` to simulate a box with Ollama stopped, so you can play the TensorFold recipe row.
-
 ## Screenshots
 
 | The shelf, grouped by how many nodes each model needs | The guard: nothing stops until you name it |
@@ -123,78 +230,80 @@ Demo mode fakes a 35-model NAS and a 128 GB GPU box. Insert, eject, the guard di
 
 <p align="center"><img src="docs/images/screenshot-mobile.png" width="300" alt="mobile view"><br><em>Works on a phone.</em></p>
 
-## How it fits together
+## FAQ
 
-![architecture](docs/images/architecture.png)
+<details>
+<summary><b>Can I try it without a NAS or a GPU?</b></summary>
 
-## How the node count is estimated
+Yes. `python3 deck/mcc_deck.py serve --demo` fakes a 35-model NAS and a 128 GB GPU box. Insert, eject, the guard dialog and
+the log all work, and nothing on your machine is touched. Add `--demo-no-ollama` to play the TensorFold recipe row. See
+[Try it in 10 seconds](#try-it-in-10-seconds-no-nas-no-gpu).
+</details>
 
-Each runnable unit (one GGUF quant, or one whole safetensors folder) gets the smallest node count *k* for which the weights plus per-node overhead fit:
+<details>
+<summary><b>Can an insert knock out the model I am using?</b></summary>
 
-`max(W + 5.6·k + 8, 1.15·W) ≤ 95.69·k`  (GiB, W = weights; defaults are tuned for a 128 GB unified-memory node)
+No. An insert never stops anything you did not name: if it would stop or evict anything, the server answers 409 with the
+exact list and does nothing until every name is confirmed. Protected models keep their memory reserved even when they are
+unloaded, and a GGUF insert never evicts them. A vLLM or SGLang cassette takes most of the GPU, so its dialog names
+everything it would stop, protected models included. The plan is checked again after the copy. The rules are in
+[User Guide §6](docs/USER_GUIDE.md#6-the-guard-rule-by-rule).
+</details>
 
-![fit chart](docs/images/fit-chart.png)
+<details>
+<summary><b>Why not run models straight off the NAS share?</b></summary>
 
-This is an estimate and a *floor*. Every constant is in the config, so you can tune it for your own cards. The deck itself only inserts single-node units; anything bigger is shown with its tier and any matching multi-node "kit" (a serving recipe kept on the NAS).
+Loading a model reads every byte, often more than once, and network page-cache misses make it slow and fragile. Copy once to
+NVMe, then run. Over 10 GbE a 65 GB model copies in about 1–1.5 minutes (see [Use 10 GbE](#use-10-gbe-between-the-nas-and-the-gpu-box)).
+</details>
 
-![demo library](docs/images/demo-library.png)
+<details>
+<summary><b>Does the sync wake my NAS?</b></summary>
 
-## Hardware required
+No. It makes one ssh attempt with a 5-second timeout. If the NAS does not answer, it records *asleep* and keeps the last
+index, and the header dot turns red.
+</details>
 
-| | Minimum | Developed and tested on |
-|---|---|---|
-| **GPU box** | Linux with an NVIDIA GPU (or Apple silicon for recipe lanes), enough fast local disk to hold the models you play | **NVIDIA DGX Spark** (GB10, 128 GB unified memory, aarch64, 4 TB NVMe) |
-| **NAS** | Any always-on Linux machine with enough storage for your model library | Ubuntu Server 24.04 on a 4-bay NAS, one 20 TB drive (19 TB XFS) |
-| **Network** | Gigabit Ethernet (about 110 MB/s, so a 60 GB model takes ~10 min) | **10 GbE** between the NAS and the GPU box (see below) |
-| **Optional** | A NAS network card with Wake-on-LAN, if you let the NAS sleep | |
+<details>
+<summary><b>Can I use it without Ollama, or without Docker?</b></summary>
 
-- The node-count estimate defaults to **128 GB unified-memory nodes** (a DGX Spark). For other cards, change the per-node budget and overheads
-  in `deck.json` (see [How the node count is estimated](#how-the-node-count-is-estimated)).
-- Local disk: a GGUF cassette needs about **2.2 × its size** while it is created (Ollama writes a copy); safetensors about **1.1 ×**.
-- Several GPU nodes (up to four) are shown in the GPU-nodes panel. The deck only *inserts* single-node models; bigger ones keep their tier.
+Yes. GGUF needs only Ollama, vLLM and SGLang only Docker (with the NVIDIA Container Toolkit); whichever is missing just
+refuses that path. An Ollama that is stopped or not installed does not block vLLM, SGLang or recipe inserts.
+</details>
 
-## Prerequisites
+<details>
+<summary><b>Why only one GPU engine at a time?</b></summary>
 
-**GPU box**
-- Linux, **Python 3.9+** (standard library only: nothing to `pip install`), `ssh`, `rsync`, systemd user services.
-- Key-based **ssh** access to the NAS (an alias in `~/.ssh/config`).
-- At least one engine:
-  - [Ollama](https://ollama.com) for GGUF models;
-  - **Docker + NVIDIA Container Toolkit** for the vLLM / SGLang images (safetensors);
-  - optional **recipe lanes** such as a TensorFold serving recipe (from its own repository, under its own licence).
-- A browser on your network. The deck listens on `127.0.0.1:8099` with a token; put a reverse proxy with authentication in front if you
-  reach it from elsewhere (see [SECURITY.md](SECURITY.md)).
+On a single GPU box, vLLM, SGLang and most recipes each reserve most of the GPU memory up front. Running two at once fails at
+load time or runs out of memory later, so a vLLM, SGLang or recipe cassette must be ejected before another one is inserted.
+</details>
 
-**NAS**
-- Linux, **Python 3.9+**, an **ssh** server, and `rsync`.
-- Your model folders on local disk. The indexer only *reads* them and publishes a symlink library plus `library.json`.
-- systemd, for the 10-minute index timer.
+<details>
+<summary><b>Does it download models, or need an account?</b></summary>
 
-**Accounts and keys:** none. Download models however you like (for example `huggingface-cli`). The deck never contacts a model hub.
+No. Fetch models however you like (`huggingface-cli`, `git lfs`, a browser); the indexer picks them up on its next run. There
+are no accounts or keys, and the deck never contacts a model hub.
+</details>
 
-## Quick start (real hardware)
+<details>
+<summary><b>Can I use it from my phone?</b></summary>
 
-**On the NAS** (any Linux box holding your model folders):
+Yes: the sidebar becomes a scrolling top bar and every model row a stacked card. The deck listens on `127.0.0.1:8099` and
+wants a token, so reach it through an SSH tunnel, a VPN or an authenticating reverse proxy, never by exposing the port to the
+internet. See [User Guide §9](docs/USER_GUIDE.md#9-remote-access) and [SECURITY.md](SECURITY.md).
+</details>
 
-```bash
-sudo scripts/install-nas.sh                 # installs mcc_index.py + a 10-minute systemd timer
-sudoedit /etc/mcc/nas.json                   # where your model folders are
-python3 /usr/local/bin/mcc_index.py --dry-run
-sudo systemctl enable --now mcc-index.timer
-```
+## Documentation
 
-**On the GPU box:**
-
-```bash
-scripts/install-deck.sh                      # per-user install, no root
-$EDITOR ~/.config/mcc/deck.json              # ssh alias of the NAS, its library path, protected models
-python3 ~/.local/share/mcc/mcc_deck.py sync  # first copy of the index
-systemctl --user enable --now mcc-sync.timer mcc-deck.service
-```
-
-Open `http://127.0.0.1:8099/` and paste the token from `~/.config/mcc/token`.
-
-The full walkthrough is in the **[User Guide](docs/USER_GUIDE.md)**. It covers folder layouts, every config key, the guard rules, remote access, troubleshooting and the API.
+| | |
+|---|---|
+| [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | the full walkthrough: folder layouts, every config key, the guard rule by rule, engines and recipe lanes, remote access, troubleshooting, the HTTP API |
+| [examples/](examples/) | `nas.example.json`, `deck.example.json`, `recipes.example.json` (TensorFold) |
+| [docs/src/README.md](docs/src/README.md) | how the images in `docs/images/` are drawn |
+| [CHANGELOG.md](CHANGELOG.md) | what changed in each release |
+| [SECURITY.md](SECURITY.md) | the security model, and how to report a vulnerability privately |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | the house rules and the tests |
+| [NOTICE.md](NOTICE.md) | third-party projects and credits |
 
 ## What it is not
 
@@ -215,6 +324,13 @@ scripts/                  install-nas.sh, install-deck.sh
 tests/                    python -m unittest discover -s tests
 docs/                     USER_GUIDE.md, images, and the scripts that draw them
 ```
+
+## Contributing
+
+Bug reports and focused pull requests are welcome: [open an issue](https://github.com/sunnychase/nas-model-cassette-changer/issues)
+or [send a pull request](https://github.com/sunnychase/nas-model-cassette-changer/pulls). Keep it standard-library Python, and
+give any change to the guard a test that shows the new rule fails closed; [CONTRIBUTING.md](CONTRIBUTING.md) has the details.
+Report security problems privately, as described in [SECURITY.md](SECURITY.md).
 
 ## Credits
 
