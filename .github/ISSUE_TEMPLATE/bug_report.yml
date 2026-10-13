@@ -1,0 +1,141 @@
+name: Bug report
+description: Something in the deck, the guard or the indexer does not work as described
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One problem per report, please. Remove personal paths, host names, addresses, tokens and the contents of `~/.config/mcc/token` from anything you paste.
+        A security problem? Do not file it here; see SECURITY.md.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched the open and closed issues for the same problem.
+          required: true
+        - label: I removed personal paths, host names, addresses and tokens from this report.
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - The guard (refused, would stop, protected models)
+        - INSERT (copy or start)
+        - EJECT / delete local copy
+        - Shelf, engine selector or player
+        - Benchmarks (LLM server card)
+        - NAS indexer (mcc_index.py)
+        - Sync (NAS asleep, stale index)
+        - Demo mode
+        - Install or systemd units
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Engine
+      options:
+        - Ollama
+        - vLLM
+        - SGLang
+        - Recipe lane (e.g. TensorFold)
+        - Not engine-specific
+    validations:
+      required: true
+
+  - type: dropdown
+    id: format
+    attributes:
+      label: Model format
+      options:
+        - GGUF
+        - safetensors
+        - EXL3 / EXL2
+        - Other
+        - Not model-specific
+    validations:
+      required: true
+
+  - type: dropdown
+    id: demo
+    attributes:
+      label: Does it happen in demo mode?
+      description: "`python3 deck/mcc_deck.py serve --demo`"
+      options:
+        - "Yes"
+        - "No"
+        - Did not try
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did and what you saw, with the deck log line or the guard's reason if there is one.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Pick the vLLM engine
+        2. INSERT ...
+        3. Confirm ... and ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: "The version from `/api/health`, or `git rev-parse --short HEAD` in your clone"
+    validations:
+      required: true
+
+  - type: textarea
+    id: gpu-box
+    attributes:
+      label: GPU box
+      description: Hardware and memory, OS, Python, and the engine versions or image tags you use.
+      placeholder: DGX Spark (GB10, 128 GB unified memory), Ubuntu 24.04, Python 3.12, Ollama, vllm/vllm-openai:latest
+    validations:
+      required: true
+
+  - type: textarea
+    id: nas
+    attributes:
+      label: NAS and network
+      description: The NAS's OS, filesystem and drives, and the link to the GPU box.
+      placeholder: Ubuntu Server 24.04, 4-bay, XFS on one HDD, 10 GbE direct cable
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "The smallest useful part of the deck log, `journalctl --user -u mcc-deck -u mcc-sync`, or `docker logs mcc-vllm` / `mcc-sglang`."
+      render: text
+
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: Screenshots, the relevant part of deck.json (no tokens), or what you already tried.

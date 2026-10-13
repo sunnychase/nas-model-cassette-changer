@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: User Guide
+    url: https://github.com/sunnychase/nas-model-cassette-changer/blob/main/docs/USER_GUIDE.md
+    about: Setup, every config key, the guard rule by rule, engines and recipe lanes, troubleshooting and the FAQ.
+  - name: Report a security problem privately
+    url: https://github.com/sunnychase/nas-model-cassette-changer/security/policy
+    about: Use private vulnerability reporting. Please do not open a public issue for security problems.

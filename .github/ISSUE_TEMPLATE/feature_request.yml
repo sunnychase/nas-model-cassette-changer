@@ -1,0 +1,82 @@
+name: Feature request
+description: Suggest one focused improvement
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One idea per request, please. For a large change (a new engine, a change to the guard), describe the problem first so
+        the approach can be agreed before anyone builds it.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched the open and closed issues and pull requests for the same idea.
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - The guard
+        - INSERT / EJECT
+        - Engines (Ollama, vLLM, SGLang)
+        - Recipe lanes (e.g. TensorFold)
+        - Shelf, engine selector or player
+        - Benchmarks
+        - NAS indexer or sync
+        - More than one GPU node
+        - Install or documentation
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: format
+    attributes:
+      label: Model format it concerns
+      options:
+        - GGUF
+        - safetensors
+        - EXL3 / EXL2
+        - Other
+        - Not model-specific
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What is hard or impossible today, and when do you run into it?
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you would like
+      description: What the deck or the indexer should do, and how you would know it works.
+    validations:
+      required: true
+
+  - type: textarea
+    id: setup
+    attributes:
+      label: Your GPU box and NAS
+      description: If it matters for the idea, the GPU box (memory, engines) and the NAS (storage, link).
+      placeholder: 128 GB unified-memory GPU box with Ollama and vLLM; Linux NAS on 10 GbE
+
+  - type: textarea
+    id: limits
+    attributes:
+      label: Constraints
+      description: The deck is standard-library Python, plays one GPU engine at a time, and never stops anything you did not name. Say if your idea touches any of that.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
