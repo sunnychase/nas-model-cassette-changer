@@ -333,6 +333,16 @@ give any change to the guard a test that shows the new rule fails closed. [CONTR
 and the checks (`python3 -m unittest discover -s tests` and `bash scripts/check.sh`); [AGENTS.md](AGENTS.md) is a short guide
 for coding agents. Report security problems privately, as described in [SECURITY.md](SECURITY.md).
 
+## Star history
+
+<a href="https://www.star-history.com/#sunnychase/nas-model-cassette-changer&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=sunnychase/nas-model-cassette-changer&type=Date&theme=dark">
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=sunnychase/nas-model-cassette-changer&type=Date">
+    <img alt="Lion AI Models star history" src="https://api.star-history.com/svg?repos=sunnychase/nas-model-cassette-changer&type=Date" width="600">
+  </picture>
+</a>
+
 ## Credits
 
 Created by **[Sunny Chase](https://github.com/sunnychase)** in collaboration with **Claude** (Anthropic).
