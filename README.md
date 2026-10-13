@@ -1,10 +1,24 @@
-# Lion AI Models · Professional Model Suite
+<p align="center"><img src="docs/images/logo.png" width="148" alt="Lion AI Models"></p>
 
-*The NAS Model Cassette Changer, redesigned. Created by [Sunny Chase](https://github.com/sunnychase) in collaboration with Claude (Anthropic).*
+<h1 align="center">Lion AI Models</h1>
+<p align="center"><b>Professional Model Suite</b><br>
+Keep every AI model you own on a NAS. Play any of them on your GPU box with one click, without ever knocking out the model you are using.</p>
 
-**Keep every AI model you own on a NAS. Play any of them on your GPU box with one click, without ever knocking out the model you are using.**
+<p align="center"><em>The NAS Model Cassette Changer, redesigned. Created by <a href="https://github.com/sunnychase">Sunny Chase</a> in collaboration with Claude (Anthropic).</em></p>
 
-![Lion AI Models playing Qwen3.8-Flash-Next in a TensorFold lane, with the LLM server card and GPU nodes](docs/images/screenshot-playing.png)
+<p align="center">
+  <a href="https://github.com/sunnychase/nas-model-cassette-changer/actions/workflows/tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/sunnychase/nas-model-cassette-changer/tests.yml?branch=main&style=flat-square&label=tests" alt="Tests"></a>
+  <a href="https://github.com/sunnychase/nas-model-cassette-changer/releases"><img src="https://img.shields.io/github/v/release/sunnychase/nas-model-cassette-changer?style=flat-square" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License: MIT"></a>
+  <a href="#prerequisites"><img src="https://img.shields.io/badge/python-3.9%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.9+"></a>
+  <a href="#prerequisites"><img src="https://img.shields.io/badge/dependencies-stdlib%20only-success?style=flat-square" alt="Dependencies: Python standard library only"></a>
+  <a href="#engines"><img src="https://img.shields.io/badge/engines-Ollama%20%C2%B7%20vLLM%20%C2%B7%20SGLang-555555?style=flat-square" alt="Engines: Ollama, vLLM, SGLang"></a>
+  <a href="#hardware-required"><img src="https://img.shields.io/badge/platform-Linux%20%2B%20NVIDIA%20GPU%20%C2%B7%20DGX%20Spark%20tested-76B900?style=flat-square&logo=nvidia&logoColor=white" alt="Platform: Linux with an NVIDIA GPU, tested on a DGX Spark"></a>
+  <a href="https://github.com/sunnychase/nas-model-cassette-changer/commits/main"><img src="https://img.shields.io/github/last-commit/sunnychase/nas-model-cassette-changer?style=flat-square" alt="Last commit"></a>
+  <a href="https://github.com/sunnychase/nas-model-cassette-changer"><img src="https://img.shields.io/github/stars/sunnychase/nas-model-cassette-changer?style=flat-square" alt="GitHub stars"></a>
+</p>
+
+<p align="center"><img src="docs/images/screenshot-playing.png" width="100%" alt="Lion AI Models playing Qwen3.8-Flash-Next in a TensorFold lane, with the LLM server card and GPU nodes"></p>
 
 Local models are huge. A GPU box has a fast but small disk; a NAS has lots of cheap space but is far too slow to serve from. The NAS Model Cassette Changer treats every model like a cassette on a shelf:
 
