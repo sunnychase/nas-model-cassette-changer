@@ -16,6 +16,7 @@ Keep every AI model you own on a NAS. Play any of them on your GPU box with one 
   <a href="#hardware-required"><img src="https://img.shields.io/badge/platform-Linux%20%2B%20NVIDIA%20GPU%20%C2%B7%20DGX%20Spark%20tested-76B900?style=flat-square&logo=nvidia&logoColor=white" alt="Platform: Linux with an NVIDIA GPU, tested on a DGX Spark"></a>
   <a href="https://github.com/sunnychase/nas-model-cassette-changer/commits/main"><img src="https://img.shields.io/github/last-commit/sunnychase/nas-model-cassette-changer?style=flat-square" alt="Last commit"></a>
   <a href="https://github.com/sunnychase/nas-model-cassette-changer"><img src="https://img.shields.io/github/stars/sunnychase/nas-model-cassette-changer?style=flat-square" alt="GitHub stars"></a>
+  <a href="https://donate.stripe.com/fZuaER2Cbecw7cQ6PlfEk00"><img src="https://img.shields.io/badge/donate-Stripe-635BFF?style=flat-square&logo=stripe&logoColor=white" alt="Donate with Stripe"></a>
 </p>
 
 <p align="center">
