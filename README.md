@@ -302,7 +302,7 @@ internet. See [User Guide §9](docs/USER_GUIDE.md#9-remote-access) and [SECURITY
 | [docs/src/README.md](docs/src/README.md) | how the images in `docs/images/` are drawn |
 | [CHANGELOG.md](CHANGELOG.md) | what changed in each release |
 | [SECURITY.md](SECURITY.md) | the security model, and how to report a vulnerability privately |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | the house rules and the tests |
+| [CONTRIBUTING.md](CONTRIBUTING.md) · [AGENTS.md](AGENTS.md) | the house rules, the tests and `scripts/check.sh`; notes for coding agents, with the guard's promises |
 | [NOTICE.md](NOTICE.md) | third-party projects and credits |
 
 ## What it is not
@@ -320,7 +320,7 @@ deck/mcc_deck.py          GPU-box deck: sync, guard, insert/eject, web server, d
 deck/deck.html            the web page (no build step, no external assets)
 examples/                 nas.example.json, deck.example.json, recipes.example.json (TensorFold)
 nas/systemd, deck/systemd timers and services
-scripts/                  install-nas.sh, install-deck.sh
+scripts/                  install-nas.sh, install-deck.sh, check.sh (py_compile + hygiene grep)
 tests/                    python -m unittest discover -s tests
 docs/                     USER_GUIDE.md, images, and the scripts that draw them
 ```
@@ -329,8 +329,9 @@ docs/                     USER_GUIDE.md, images, and the scripts that draw them
 
 Bug reports and focused pull requests are welcome: [open an issue](https://github.com/sunnychase/nas-model-cassette-changer/issues)
 or [send a pull request](https://github.com/sunnychase/nas-model-cassette-changer/pulls). Keep it standard-library Python, and
-give any change to the guard a test that shows the new rule fails closed; [CONTRIBUTING.md](CONTRIBUTING.md) has the details.
-Report security problems privately, as described in [SECURITY.md](SECURITY.md).
+give any change to the guard a test that shows the new rule fails closed. [CONTRIBUTING.md](CONTRIBUTING.md) covers demo mode
+and the checks (`python3 -m unittest discover -s tests` and `bash scripts/check.sh`); [AGENTS.md](AGENTS.md) is a short guide
+for coding agents. Report security problems privately, as described in [SECURITY.md](SECURITY.md).
 
 ## Credits
 
