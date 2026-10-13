@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+- **Repository: badges, donate link, issue forms, CI hygiene check, AGENTS guide.** No code change; the version stays 1.4.0.
+- **README:** a centred header (logo, title, tagline, the creator credit), a badge row (tests, latest release, licence, Python 3.9+,
+  standard library only, engines, platform, last commit, stars, donate), a navigation row, *How it works*, an FAQ, a Documentation
+  index, Contributing and a star-history chart. Every existing section is kept; Quick start now groups download, the demo, real
+  hardware, hardware required and prerequisites.
+- **CI:** `tests.yml` keeps its test matrix (Python 3.9, 3.11, 3.12) and adds a hygiene job: `scripts/check.sh` compiles every
+  Python file and fails on home-directory paths, private network addresses or token-shaped strings.
+- **New files:** `AGENTS.md` (notes for coding agents, with the guard's promises), `NOTICE.md`, issue forms (bug, feature) with blank
+  issues off, a pull-request template, and `.github/FUNDING.yml` (the Sponsor button: donate with Stripe).
+- `CONTRIBUTING.md` and `SECURITY.md` expanded; their existing rules are unchanged. SECURITY.md now points remote access to User
+  Guide §9 (it said §8).
+
 ## 1.4.0 — Lion AI Models · Professional Model Suite
 - **New interface:** sidebar of sections (Now playing, Engines, GPU nodes, Models, Local copies, Deck log) with scroll highlighting, a clean
   header, charcoal-and-gold palette, calmer cards, tables and buttons. Same markup ids and the same script: every control and API is unchanged.
