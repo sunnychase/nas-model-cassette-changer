@@ -8,3 +8,5 @@ The MIT licence in [LICENSE](LICENSE) covers the code in this repository.
 - **Model weights** keep their own licences; each generated `ABOUT-MODEL.md` shows the licence from the model card.
 - **README and repository-template layout** adapted from [morluto/rea](https://github.com/morluto/rea) (MIT): the structure
   only; the wording is this project's own.
+
+Created by Sunny Chase (https://github.com/sunnychase) in collaboration with Claude (Anthropic).
