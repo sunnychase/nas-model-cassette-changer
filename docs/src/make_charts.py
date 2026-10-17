@@ -1,4 +1,7 @@
-"""Regenerate docs/images/fit-chart.png and docs/images/demo-library.png (needs matplotlib)."""
+"""Regenerate docs/images/fit-chart-recent-models.png and docs/images/demo-library.png (needs matplotlib).
+
+The fit chart marks recent models at the real sizes of the units in a working library (NAS index, October 2026).
+"""
 import os, sys
 import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -11,7 +14,7 @@ plt.rcParams.update({"figure.facecolor": BG, "axes.facecolor": BG, "axes.edgecol
                      "xtick.color": DIM, "ytick.color": DIM, "font.size": 11, "axes.titleweight": "bold"})
 
 # 1 — how many nodes a unit needs, by size
-F = D.DEFAULTS["fit"]; xs = [x / 2 for x in range(1, 2 * 460)]
+F = D.DEFAULTS["fit"]; XMAX = 560; xs = [x / 2 for x in range(1, 2 * XMAX)]
 fig, ax = plt.subplots(figsize=(11, 5.2), dpi=160)
 prev, start = None, 0.5
 for x in xs + [None]:
@@ -24,18 +27,22 @@ for x in xs + [None]:
     prev = k
 ys = [D.nodes_needed(x * 1e9, F) or 5 for x in xs]
 ax.step(xs, ys, where="post", color=FG, lw=2)
-for name, gb, dy in [("gpt-oss-20b MXFP4", 12.1, 70), ("Qwen3-32B Q4_K_M", 19.8, 50), ("Llama-3.3-70B Q4_K_M", 42.5, 30), ("GLM-4.5-Air Q4_K_M", 72.9, 12),
-                     ("Llama-3.3-70B BF16", 141.1, -18), ("Llama-4-Scout BF16", 217, -18), ("Kimi-K2 UD-Q2_K_XL", 381, -22)]:
+# recent models, at the size of the unit as the library index has it (GB = 10^9 bytes); label position in data units
+for name, gb, tx, ty, ha in [("Qwen3.8-27B UD-Q4_K_XL", 18.5, 18.5, 2.95, "left"), ("Nemotron 3.5 Bolt 74B-A9B", 24.1, 24.1, 2.6, "left"),
+                             ("Nemotron 3.5 Super NVFP4", 75.1, 75.1, 2.25, "left"), ("Qwen3.8-Flash-Next INT4", 130.8, 96, 1.42, "left"),
+                             ("GLM-5.3-Flash FP4", 177.5, 186, 1.7, "left"), ("DeepSeek-V4.1-Flash EXL3 3.0bpw", 219.3, 226, 2.7, "left"),
+                             ("GLM-5.3 EXL3 2.75bpw", 292.8, 300, 3.7, "left"), ("DeepSeek-V4.1-Flash FP8", 510.3, 520, 4.7, "right")]:
     k = D.nodes_needed(gb * 1e9, F) or 5
     ax.plot([gb], [k], "o", color=TC.get(D.nodes_needed(gb * 1e9, F)), ms=8, mec=BG, mew=1.5, zorder=5)
-    ax.annotate(f"{name} · {gb:g} GB", (gb, k), xytext=(4, dy), textcoords="offset points", fontsize=8.5, color=FG,
-                arrowprops=dict(arrowstyle="-", color=DIM, lw=.7) if abs(dy) > 25 else None)
-ax.set_xlim(0, 460); ax.set_ylim(0.4, 5.1); ax.set_yticks([1, 2, 3, 4, 5]); ax.set_yticklabels(["1", "2", "3", "4", "beyond"])
+    up = ty > k   # labels above their point hang on a vertical leader from the label's lower-left corner
+    ax.annotate(f"{name} · {gb:g} GB", (gb, k), xytext=(tx, ty), ha=ha, va="bottom" if up else "center", fontsize=8.5, color=FG,
+                arrowprops=dict(arrowstyle="-", color=DIM, lw=.7, relpos=(0, 0), shrinkB=5) if up else None)
+ax.set_xlim(0, XMAX); ax.set_ylim(0.4, 5.1); ax.set_yticks([1, 2, 3, 4, 5]); ax.set_yticklabels(["1", "2", "3", "4", "beyond"])
 ax.set_xlabel("weights of the unit you insert (GB)"); ax.set_ylabel("GPU nodes needed")
 ax.set_title("Fit estimate: max(W + 5.6·k + 8, 1.15·W) ≤ 95.69·k GiB  (a 128 GB unified-memory node)", fontsize=11.5, loc="left", pad=12)
 #: max(W + 5.6·k + 8, 1.15·W) ≤ 95.69·k GiB  (128 GB unified-memory node)", fontsize=11.5, loc="left")
 ax.grid(axis="x", color=GRID); [s.set_visible(False) for s in (ax.spines["top"], ax.spines["right"])]
-fig.tight_layout(); fig.savefig(os.path.join(OUT, "fit-chart.png")); plt.close(fig)
+fig.tight_layout(); fig.savefig(os.path.join(OUT, "fit-chart-recent-models.png")); plt.close(fig)
 
 # 2 — the demo shelf: models per tier, split by category
 rows = {}

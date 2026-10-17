@@ -1,6 +1,11 @@
 # Changelog
 
 ## Unreleased
+- **README media:** a 12-second silent clip of the cassette player on a working deck (`docs/media/nas-model-cassette-changer.mp4`, with an
+  animated `preview.webp` shown inline at the top), a still of that deck (`docs/images/screenshot-live-deck.png`: 220 models,
+  Qwen3.8-Flash-Next in a TensorFold lane), and the fit chart redrawn with recent models at their real unit sizes
+  (`docs/images/fit-chart-recent-models.png`: Qwen3.8-27B, Nemotron 3.5 Bolt and Super, Qwen3.8-Flash-Next, GLM-5.3-Flash,
+  DeepSeek-V4.1-Flash, GLM-5.3). Same formula, constants and colours; the x-axis now runs to 560 GB. No code change.
 - **Repository: badges, donate link, issue forms, CI hygiene check, AGENTS guide.** No code change; the version stays 1.4.0.
 - **README:** a centred header (logo, title, tagline, the creator credit), a badge row (tests, latest release, licence, Python 3.9+,
   standard library only, engines, platform, last commit, stars, donate), a navigation row, *How it works*, an FAQ, a Documentation

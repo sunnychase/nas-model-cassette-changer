@@ -30,7 +30,10 @@ Keep every AI model you own on a NAS. Play any of them on your GPU box with one 
   <a href="#contributing">Contributing</a>
 </p>
 
-<p align="center"><img src="docs/images/screenshot-playing.png" width="100%" alt="Lion AI Models playing Qwen3.8-Flash-Next in a TensorFold lane, with the LLM server card and GPU nodes"></p>
+<p align="center"><a href="docs/media/nas-model-cassette-changer.mp4"><img src="docs/media/preview.webp" width="100%" alt="Lion AI Models: the cassette player on a working deck with a 220-model NAS library, Qwen3.8-Flash-Next playing in a TensorFold lane, the reels turning"></a><br>
+<sub>▶ <a href="docs/media/nas-model-cassette-changer.mp4"><b>Watch the 12-second clip</b></a> (MP4, 1920 px wide, silent): the cassette player on a working
+deck with a 220-model NAS library, Qwen3.8-Flash-Next playing in a TensorFold lane. Every frame is the deck page itself; on the deck the
+reels turn while a cassette loads, and for this clip they turn on the playing cassette.</sub></p>
 
 Local models are huge. A GPU box has a fast but small disk; a NAS has lots of cheap space but is far too slow to serve from. The NAS Model Cassette Changer treats every model like a cassette on a shelf:
 
@@ -151,7 +154,13 @@ Each runnable unit (one GGUF quant, or one whole safetensors folder) gets the sm
 
 `max(W + 5.6·k + 8, 1.15·W) ≤ 95.69·k`  (GiB, W = weights; defaults are tuned for a 128 GB unified-memory node)
 
-![fit chart](docs/images/fit-chart.png)
+![fit chart](docs/images/fit-chart-recent-models.png)
+
+The dots are recent models at the sizes of real units in a working library (October 2026): Qwen3.8-27B (UD-Q4_K_XL GGUF, 18.5 GB),
+Nemotron 3.5 Bolt 74B-A9B (24.1 GB), Nemotron 3.5 Super VL 120B-A12B NVFP4 (75.1 GB), Qwen3.8-Flash-Next 125B-A5B INT4 (130.8 GB),
+GLM-5.3-Flash FP4 (177.5 GB), DeepSeek-V4.1-Flash EXL3 3.0 bpw (219.3 GB), GLM-5.3 EXL3 2.75 bpw (292.8 GB) and DeepSeek-V4.1-Flash
+FP8 (510.3 GB). A recipe lane states its own memory need, so it can play a unit on fewer nodes than this estimate: the
+Qwen3.8-Flash-Next INT4 cassette in the clip above plays on one node in its TensorFold lane.
 
 This is an estimate and a *floor*. Every constant is in the config, so you can tune it for your own cards. The deck itself only inserts single-node units; anything bigger is shown with its tier and any matching multi-node "kit" (a serving recipe kept on the NAS).
 
@@ -218,6 +227,10 @@ Results are kept in `bench.jsonl` / `peaks.json` in the state dir. Quality and t
 <br clear="right">
 
 ## Screenshots
+
+<p align="center"><img src="docs/images/screenshot-live-deck.png" width="100%" alt="A working deck: 220 models on the NAS grouped by how many nodes each needs, the engine bar, and Qwen3.8-Flash-Next playing in a TensorFold lane with the LLM server card"><br>
+<em>A working deck: 220 models on the NAS, Qwen3.8-Flash-Next playing in a TensorFold lane. This deck carries a few local extras
+(service chips, a llama.cpp and a Media tab) on top of the public page; the views below are the public page in demo mode.</em></p>
 
 | The shelf, grouped by how many nodes each model needs | The guard: nothing stops until you name it |
 |---|---|
@@ -300,7 +313,7 @@ internet. See [User Guide §9](docs/USER_GUIDE.md#9-remote-access) and [SECURITY
 |---|---|
 | [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | the full walkthrough: folder layouts, every config key, the guard rule by rule, engines and recipe lanes, remote access, troubleshooting, the HTTP API |
 | [examples/](examples/) | `nas.example.json`, `deck.example.json`, `recipes.example.json` (TensorFold) |
-| [docs/src/README.md](docs/src/README.md) | how the images in `docs/images/` are drawn |
+| [docs/src/README.md](docs/src/README.md) | how the images in `docs/images/` and the clip in `docs/media/` are made |
 | [CHANGELOG.md](CHANGELOG.md) | what changed in each release |
 | [SECURITY.md](SECURITY.md) | the security model, and how to report a vulnerability privately |
 | [CONTRIBUTING.md](CONTRIBUTING.md) · [AGENTS.md](AGENTS.md) | the house rules, the tests and `scripts/check.sh`; notes for coding agents, with the guard's promises |
