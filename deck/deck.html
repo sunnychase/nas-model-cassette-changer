@@ -67,7 +67,8 @@ background:linear-gradient(180deg,rgba(216,180,106,.05),rgba(216,180,106,0) 60%)
 .mem i{display:block;height:100%;background:linear-gradient(90deg,var(--acc),var(--acc2))}
 .cass{border:1px solid rgba(216,180,106,.35);border-radius:9px;padding:5px 9px;margin-top:6px;background:var(--accbg);font-size:12px}
 .prot{border-color:rgba(90,211,138,.35);background:rgba(90,211,138,.07)}
-.reel{transform-origin:center;transform-box:fill-box}.spin .reel{animation:spin 2.4s linear infinite}
+.reel{transform-origin:center;transform-box:fill-box}.spin .reel{animation:spin 2.4s linear infinite}.spin.fast .reel{animation-duration:.9s}
+@media (prefers-reduced-motion:reduce){.spin .reel{animation:none}}
 @keyframes spin{to{transform:rotate(360deg)}}
 .bar{background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:12px 16px;margin-top:0;line-height:1.9}
 section{margin-top:18px}
@@ -202,10 +203,10 @@ function tape(){const R=D.residents||{},p=D.playing||{},j=D.job||{},oll=(R.ollam
  const spokes=cx=>[0,60,120,180,240,300].map(a=>`<rect x="${cx-2}" y="105" width="4" height="9" fill="#64748b" transform="rotate(${a} ${cx} 127)"/>`).join("");
  const LF=D.last_fail;let ack="";try{ack=localStorage.getItem("mcc_failack")||"";}catch(e){}
  const fail=LF&&LF.ts!==ack&&!load?`<div class="job tred" style="margin:0 0 8px">⚠ last load failed: <b>${esc(String(LF.id||"").split("/").slice(1,2).join(""))}</b> — ${esc(LF.why)} <button class="sm ghost" data-ts="${esc(LF.ts)}" onclick="try{localStorage.setItem('mcc_failack',this.dataset.ts)}catch(e){};draw()">dismiss</button></div>`:"";
- // the reels turn only while a cassette is LOADING; a loaded cassette sits still (the left reel full, the right one wound)
- $("tape").innerHTML=`<svg viewBox="0 0 340 210" class="${load?"spin":""}" role="img" aria-label="cassette: ${esc(mode)} ${esc(title)}">
+ // the reels turn while a cassette plays and fast while it LOADS; the frame is green when playing, amber while loading, red when stopped
+ $("tape").innerHTML=`<svg viewBox="0 0 340 210" class="${load?"spin fast":on?"spin":""}" role="img" aria-label="cassette: ${esc(mode)} ${esc(title)}">
  <defs><linearGradient id="sh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1e293b"/><stop offset="1" stop-color="#0f172a"/></linearGradient></defs>
- <rect x="6" y="6" width="328" height="198" rx="14" fill="url(#sh)" stroke="${load?"#f59e0b":on?"#22c55e":"#334155"}" stroke-width="2"/>
+ <rect x="6" y="6" width="328" height="198" rx="14" fill="url(#sh)" stroke="${load?"#f59e0b":on?"#22c55e":"#ef4444"}" stroke-width="2"/>
  <rect x="26" y="22" width="288" height="58" rx="6" fill="${on?"#0c4a6e":"#1e293b"}" stroke="#334155"/>
  <text x="170" y="47" fill="#e2e8f0" font-size="12.5" font-family="ui-monospace,monospace" text-anchor="middle">${esc(lab)}</text>
  <text x="170" y="67" fill="#94a3b8" font-size="10" font-family="ui-monospace,monospace" text-anchor="middle">${esc(cut(sub,46))}</text>

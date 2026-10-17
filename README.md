@@ -32,8 +32,8 @@ Keep every AI model you own on a NAS. Play any of them on your GPU box with one 
 
 <p align="center"><a href="docs/media/nas-model-cassette-changer.mp4"><img src="docs/media/preview.webp" width="100%" alt="Lion AI Models: the cassette player on a working deck with a 220-model NAS library, Qwen3.8-Flash-Next playing in a TensorFold lane, the reels turning"></a><br>
 <sub>▶ <a href="docs/media/nas-model-cassette-changer.mp4"><b>Watch the 12-second clip</b></a> (MP4, 1920 px wide, silent): the cassette player on a working
-deck with a 220-model NAS library, Qwen3.8-Flash-Next playing in a TensorFold lane. Every frame is the deck page itself; on the deck the
-reels turn while a cassette loads, and for this clip they turn on the playing cassette.</sub></p>
+deck with a 220-model NAS library, Qwen3.8-Flash-Next playing in a TensorFold lane. Every frame is the deck page itself; the reels turn while a
+cassette plays (faster while it loads), and the green frame means playing.</sub></p>
 
 Local models are huge. A GPU box has a fast but small disk; a NAS has lots of cheap space but is far too slow to serve from. The NAS Model Cassette Changer treats every model like a cassette on a shelf:
 
@@ -203,8 +203,9 @@ Every INSERT is a full copy of the model, so the link sets how long you wait:
 - **ENGINE bar:** All · Ollama · vLLM · SGLang · every recipe lane (e.g. TensorFold) · EXL3 · Apps, each with its model count and a status dot
   (green = playing now, red = Ollama stopped, grey = idle, hollow = listed but not playable from the deck). Pick one and the whole shelf shows only
   what that engine plays. Links work too: `http://deck:8099/#engine=vLLM`.
-- **The player:** a cassette that shows what is loaded, what else is resident, and memory free. The reels turn **only while a cassette is
-  loading**; a loaded cassette sits still with its border green. A failed load stays on the player (*⚠ last load failed: … — why*) until you
+- **The player:** a cassette that shows what is loaded, what else is resident, and memory free. The reels turn while a cassette **plays** and
+  faster while it **loads**; the frame is **green** when playing, **amber** while loading and **red** when the deck is stopped or empty
+  (with *reduce motion* set in the system, the reels hold still). A failed load stays on the player (*⚠ last load failed: … — why*) until you
   dismiss it or a load succeeds.
 - **Architecture check:** before anything is copied or stopped, a safetensors model's `config.json` architectures are checked against the list
   its engine image can actually load (`mcc_deck.py archs vllm`). A model the image can't run is refused up front instead of after a long copy.
@@ -239,7 +240,7 @@ Results are kept in `bench.jsonl` / `peaks.json` in the state dir. Quality and t
 | ![loading](docs/images/screenshot-loading.png) | ![ejector](docs/images/screenshot-ejector-log.png) |
 | **Engines:** vLLM or SGLang per model, plus a TensorFold recipe row | **A TensorFold recipe lane playing** (Ollama stopped) |
 | ![engines](docs/images/screenshot-engines.png) | ![tensorfold](docs/images/screenshot-tensorfold.png) |
-| **Selector on vLLM:** the architecture check refuses a model before the copy | **Loading:** the only time the reels turn |
+| **Selector on vLLM:** the architecture check refuses a model before the copy | **Loading:** amber frame, the reels turning fast |
 | ![selector on vLLM](docs/images/screenshot-selector.png) | ![loading](docs/images/screenshot-loading.png) |
 
 <p align="center"><img src="docs/images/screenshot-mobile.png" width="300" alt="mobile view"><br><em>Works on a phone.</em></p>

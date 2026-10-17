@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- **Player:** the reels now turn while a cassette plays (fast while it loads, still with *reduce motion*), and the frame says the state at
+  a glance: green playing, amber loading, red stopped or empty (`deck/deck.html`).
 - **README media:** a 12-second silent clip of the cassette player on a working deck (`docs/media/nas-model-cassette-changer.mp4`, with an
   animated `preview.webp` shown inline at the top), a still of that deck (`docs/images/screenshot-live-deck.png`: 220 models,
   Qwen3.8-Flash-Next in a TensorFold lane), and the fit chart redrawn with recent models at their real unit sizes
