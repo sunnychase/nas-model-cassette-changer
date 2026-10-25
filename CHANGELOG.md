@@ -1,6 +1,33 @@
 # Changelog
 
-## Unreleased
+## 1.5.0 — long-context benchmarks, a quality test, history and phone alerts
+- **Long context · streams** (`deck/mcc_bench.py`, the LLM server card): every stream is warmed with its own context (16k … 256k or a custom
+  size), then 1, 2, 4 and 8 streams decode together, each extending its own conversation so a prompt cache can resume it. Per level: tokens
+  per second each and in total, a steady rate while every stream decodes, the client's first-token time, and *reused* / *recomputed* from the
+  engine's cached-token count (*unchecked* when it reports none). Output length pinned where the engine allows it; an early end is *short*.
+- **Prefill sweep** from 1k to 256k tokens (a fresh prompt each time, the client's TTFT) and a **quality test**: 60 seeded questions in six
+  kinds, temperature 0, graded by rule on an `ANSWER:` line, the last 30 runs per model, an exact McNemar comparison of two runs. More than
+  two engine errors fail a run; a run with engine errors is never compared.
+- **Every run gives way:** a plan first (time, memory, the limits read from the engine: vLLM `max_model_len` and KV pool, SGLang
+  `max_total_num_tokens`, a recipe's `context` / `parallel` / `kv_bytes_per_token` / `memory_reserve_gib`, Ollama's resident context); refused
+  while another client uses the engine and stopped when one starts (or flagged, with *anyway*); stopped under the memory floor; **Cancel**
+  closes every request. Ollama is measured through `/api/chat` at its resident context with a keep_alive never shorter, one stream; a model
+  reload is flagged. The memory margin (1.5, 2.0 from 128k) comes from runs on a DGX Spark (16k × 2: 1.06× the formula; 64k × 2: 1.29×).
+- **History:** 1-minute means for 48 h and 15-minute means for 30 days (CPU, memory, GPU use, temperature and power from `nvidia-smi`, decode
+  and prefill peaks); `GET /api/history?range=`; a History section with six charts.
+- **Health and phone alerts:** memory low, a hot GPU, GPU Xid errors and OOM kills from the kernel log, the playing cassette's engine gone with
+  no EJECT, a nearly full disk; ntfy alerts, off until a topic is created on the page (random, 144 bits, shown only on request), https only,
+  public addresses only (resolved at send time), no redirects, the alert kind only in each message, a hold time, a cleared note, one raise per
+  kind per 30 minutes. `GET` / `POST /api/notify`; `health.*` and `bench.max_streams` in `deck.json`.
+- **Sign-in card** with the lion instead of a browser prompt (the token is checked before it is kept); the lion in the header; the cassette
+  stays at the top of the player beside a tall LLM server card.
+- **Demo mode** covers all of it (a simulated engine with a prompt cache, two days and a month of history, earlier runs).
+- **Tests:** `tests/test_bench.py`, 31 tests against stub engines on 127.0.0.1 (82 in all). `scripts/install-deck.sh` installs `mcc_bench.py`.
+- **README media:** a one-minute silent reel of every function (`docs/media/lion-ai-models-reel.mp4`, `.gif`), made from demo mode with the
+  scripts in `docs/src/reel/`; new screenshots of the long-context card, history, alerts, sign-in and the phone layout. User Guide §14.
+  The 1.4 clip it replaces (`docs/media/nas-model-cassette-changer.mp4`, `preview.webp`) is removed; its still stays.
+
+### Also since 1.4.0
 - **Player:** the reels now turn while a cassette plays (fast while it loads, still with *reduce motion*), and the frame says the state at
   a glance: green playing, amber loading, red stopped or empty (`deck/deck.html`).
 - **README media:** a 12-second silent clip of the cassette player on a working deck (`docs/media/nas-model-cassette-changer.mp4`, with an

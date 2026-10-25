@@ -13,6 +13,7 @@
 11. [Troubleshooting](#11-troubleshooting)
 12. [HTTP API](#12-http-api)
 13. [FAQ](#13-faq)
+14. [Benchmarks, history and phone alerts (v1.5)](#14-benchmarks-history-and-phone-alerts-v15)
 
 ---
 
@@ -149,6 +150,10 @@ python3 ~/.local/share/mcc/mcc_deck.py archs sglang
   generated. **⏱ Decode** runs 256 tokens out and times them after the first token; **⇥ Prefill** sends ≈ 2,000 tokens and times the first
   token (HTTP and queueing included, so it reads slightly low). Both work on Ollama via its own `eval_*` timings. A benchmark refuses while an
   insert runs, and only one runs at a time. **Daily peak tok/s** shows 14 days of peaks (live or benchmark), decode or prefill.
+  Below them, **LONG CONTEXT · STREAMS** (v1.5) runs the long-context decode, the prefill sweep and the quality test (§14).
+- **History** and **Health and phone alerts** (v1.5): two days of 1-minute means and thirty days of 15-minute means, what needs you now,
+  and phone alerts through ntfy (§14).
+- **Sign-in card:** without a token the page shows a sign-in card; the token is checked before the browser keeps it.
 - **GPU nodes:** memory and disk on this box, everything resident in Ollama (protected models in green), any big lanes, and the status of other nodes.
 - **Filters:** search, category, format, tier, *new only*, and *insertable now* (hides everything the guard would refuse).
 - **Shelf:** one table per tier. For a GGUF with several quants, choose one in the **unit → nodes** menu; the *if you insert it now* column updates for that quant. It shows one of three outcomes:
@@ -305,6 +310,14 @@ No list for an engine (or a NAS index older than 1.3) means no check, as before.
 | `recipes_file` | `~/.config/mcc/recipes.json` | recipe lanes (§7.2); a missing file means there are none. A recipe may add `metrics_path` (default `/metrics`) and `context` for the benchmark card |
 | `new_days` | `7` | how long the NEW badge lasts |
 | `engine_archs` | `{"vllm": "~/.config/mcc/vllm_archs.json", "sglang": "~/.config/mcc/sglang_archs.json"}` | per engine, the architecture list written by `mcc_deck.py archs`; a missing file = no check (§7.3) |
+| `bench.max_streams` | `8` | v1.5: the most streams the long-context benchmark offers on vLLM / SGLang (their KV pool is also checked) |
+| `health.gpu_hot_c` | `85` | v1.5: a GPU at or above this many °C is an alert |
+| `health.mem_low_gib` | `8` | v1.5: MemAvailable under this many GiB is an alert (and stops a benchmark) |
+| `health.disk_low_gib` | `50` | v1.5: less free disk than this under `local_dir` is an alert |
+| `health.kernel_log` | `true` | v1.5: read the kernel log (`journalctl -k`) for GPU Xid errors and out-of-memory kills; skipped when this user cannot read it |
+
+In `recipes.json`, v1.5 also reads `context` (tokens per stream), `parallel` (streams at once), `kv_bytes_per_token` (only for an engine whose
+KV cache grows per request), `memory_reserve_gib` (what the engine keeps free) and `prompt_cache_gib` (its kept-prompt budget, default 16).
 
 **Tuning the fit for other hardware:**
 
@@ -344,7 +357,12 @@ List the other nodes in `fleet` with an ssh target; the page shows each one's fr
 | Recipe never answers | Run its `start` command by hand and watch the deck log. Check that `port` and `health_path` match what the recipe actually serves. |
 | Copy speed far below the link speed | The NAS disks, not the network, are the limit (one HDD ≈ 150–250 MB/s). See §2.1. |
 | Copy is slow | rsync runs over ssh. Use a wired link to the NAS; a single HDD tops out around 150–250 MB/s. |
-| Token prompt keeps coming back | The page stores the token in your browser. Clear the site data and paste the current contents of `~/.config/mcc/token`. |
+| The sign-in card keeps coming back | The page stores the token in your browser. Paste the current contents of `~/.config/mcc/token`; if it still says *not accepted*, the token file changed: clear the site data and sign in again. |
+| A long-context run is refused with *needs ~… GiB* | The recipe's KV cache would not fit beside the headroom. Pick fewer streams or a shorter context, or free memory first. |
+| A run *stopped: another client …* | A chat or another tool used the engine; the run gave way. Run it when the engine is idle, or tick *run even while someone uses it* (the result is flagged). |
+| Every level says *recomputed* | The engine did not reuse the warm context: its prompt cache is off, too small, or keyed differently. The numbers then include the prefill. |
+| *other clients not visible* | The engine reports no running-request count (Ollama, or an engine without metrics), so the run cannot give way to a chat. |
+| *send a test* says *not delivered* | Check the server (https only, a public address) and the topic in the ntfy app; with a reserved topic, set its access token. |
 
 The deck log on the page shows the last copy or start. `journalctl --user -u mcc-deck -u mcc-sync` shows the services.
 
@@ -357,6 +375,12 @@ Every call except `/` and `/api/health` needs the header `X-Token: <token>`.
 | GET | `/api/health` | | `{"ok": true, "version"}` |
 | GET | `/api/deck[?refresh=1]` | | full state: shelf (each row has `engines`), plans, slots, playing, history, `engine_bar`, `last_fail`, `arch_check`, `bench` (`refresh` starts a background sync) |
 | POST | `/api/deck/bench` | `{"kind": "decode" \| "prefill"}` | `{"started": true}`, or `409` while an insert or another benchmark runs, or nothing is loaded |
+| POST | `/api/deck/bench` | v1.5: `{"kind": "decode2" \| "sweep" \| "quality", "plan": true, "ctx", "levels", "out", "thinking"}` | the plan only: `{"ok", "limits", "eta_s", "need_gib", "notes", "params"}` or `{"ok": false, "refuse"}` |
+| POST | `/api/deck/bench` | v1.5: the same without `plan`, plus `"anyway"` | `{"started": true, "plan"}`, or `409` with the reason |
+| POST | `/api/deck/bench` | v1.5: `{"kind": "cancel"}` · `{"kind": "compare", "a", "b"}` | `{"cancelling": true}` · the McNemar comparison of two quality runs |
+| GET | `/api/history?range=6h\|24h\|48h\|7d\|30d` | | v1.5: `{"range", "span_s", "step", "points": [{t, cpu, mem, avail, util, power, temp, tok, ptok, tmax?}]}` |
+| GET | `/api/notify` | | v1.5: alert settings with the topic masked, the current findings, the recent deliveries |
+| POST | `/api/notify` | v1.5: `{"action": "new_topic" \| "reveal" \| "save" \| "test", …}` | `save` takes `enabled`, `server`, `hold_s`, `token`; `reveal` returns the topic |
 | GET | `/api/deck/summary` | | counts per tier, NAS status |
 | GET | `/api/deck/log` | | the last copy/start log and the current job |
 | POST | `/api/deck/insert` | `{"id", "unit", "confirm_evict": [names]}` (`unit` = a key from the row's `units`, e.g. `"(whole variant) · SGLang"`) | `{"started": true}`, or `409 {"error", "would_evict"}` |
@@ -383,3 +407,81 @@ curl -s -H "X-Token: $T" -d '{"id":"OpenAI/gpt-oss-20b/ggml-org-GGUF"}' http://1
 **Where is the data?** On the GPU box: `~/.local/state/mcc/` (index copy, history, log) and `~/models/deck/` (cassettes). On the NAS: `library/` and the per-model `manifest.json` and `ABOUT-MODEL.md`.
 
 **How do I regenerate the images in these docs?** Run `python3 docs/src/make_charts.py` and `python3 docs/src/make_architecture.py`. The screenshots come from `mcc_deck.py serve --demo`.
+
+## 14. Benchmarks, history and phone alerts (v1.5)
+
+### 14.1 Long context · streams
+
+The quick **⏱ Decode** button measures a fresh, empty context. A real chat, an agent or a long document carries tens of thousands of tokens,
+and several of them may run at once. **LONG CONTEXT · STREAMS** measures that:
+
+1. Pick a **start context** (empty, 16k, 32k, 64k, 128k, 256k or a custom number), the **streams** to try (1, 2, 4, 8) and the reply length
+   (**out** 256, 512 or 1,024 tokens).
+2. **⏱ Decode at …** first shows the plan: time, memory, notes, and the limits it read from the engine. Nothing runs until you confirm.
+3. Each stream is **warmed**: its own context (random text, a fresh random tag first) is sent once with a 16-token reply. Then the levels run,
+   1 → 2 → 4 → 8: all the streams of a level ask for a long reply at the same time, each one extending its own conversation (the context,
+   the warm reply word for word, the request). An engine with a prompt cache resumes the context instead of reading it again.
+4. The result table: tokens per second **each** (per stream), **total** (all streams), **steady** (only while every stream was decoding),
+   **1st token** (seconds to the first token, the client's clock), and **context**: ✓ reused when the engine's own cached-token count covers
+   at least 90 % of the warm prompt, *recomputed* when it does not, *unchecked* when the engine reports no count.
+
+Limits come from the engine, never a guess: vLLM's `max_model_len` and KV pool, SGLang's `max_total_num_tokens`, a recipe's `context` and
+`parallel`, Ollama's resident context (and one stream; Ollama is measured through its native API at that context, so it never reloads the
+model). A context at the window is filled to the window less the replies. For a recipe whose KV cache grows per request
+(`kv_bytes_per_token`), the run is refused when streams × (context + replies) × bytes per token × a margin would not fit in MemAvailable less
+the headroom (8 GiB + `memory_reserve_gib` + 2 GiB). The margin is 1.5 (2.0 from 128k), set from measurements: on one DGX Spark with
+Qwen3.8-Flash-Next in a TensorFold lane, 16k × 2 streams took 0.67 GiB against 0.63 predicted, and 64k × 2 took 2.93 GiB against 2.27; the
+memory came back within a minute both times.
+
+While a run is in progress:
+
+- it refuses to start if another client is using the engine, and stops if one starts (tick *run even while someone uses it* to keep going;
+  the result is then flagged);
+- it stops if MemAvailable falls under `health.mem_low_gib`;
+- **■ Cancel the run** closes every open request at once.
+
+Measured on that DGX Spark (Qwen3.8-Flash-Next INT4, TensorFold, thinking off, 512 tokens out):
+
+| start context | streams | each (tok/s) | total (tok/s) | 1st token | cold prefill of the context |
+|---|---|---|---|---|---|
+| 16k | 1 | 40.3 | 40.3 | 0.3 s (reused) | 9.2 s |
+| 16k | 2 | 31.8 | 60.0 | 0.5 s (reused) | |
+| 64k | 1 | 40.6 | 40.6 | 0.3 s (reused) | 26.3 s |
+| 64k | 2 | 28.9 | 55.8 | 0.5 s (reused) | |
+
+### 14.2 Prefill sweep
+
+**⇥ Prefill sweep** sends a fresh prompt at 1k, 4k, 16k, 32k, 64k, 128k and 256k tokens (up to the lane's window and its memory plan) and
+times the first token of each: how long a big attachment takes before the reply starts.
+
+### 14.3 Quality test
+
+**✓ Quality** asks 60 fixed questions at temperature 0, ten in each of six kinds: arithmetic chains, tracking objects in boxes, following a
+format exactly, ordering by height, unit conversion, and finding a code in a ~5,000-token text. Each reply must end with an `ANSWER:` line,
+which is graded by rule (any reasoning is never read). The last 30 runs per model are kept; **compare the last two** gives an exact McNemar
+test on the questions that changed, for the whole suite (ten questions per kind are too few for a test, so the kinds show raw counts). A run
+where more than two questions failed at the engine is not saved, and a run with any engine error is not compared.
+
+### 14.4 History
+
+The deck's live sample (every 5 s) becomes a 1-minute mean, kept for 48 hours (`state_dir/metrics_1m.jsonl`), and a 15-minute mean, kept
+for 30 days (`metrics_15m.jsonl`, with the GPU temperature peak). The **History** section charts temperature, GPU and CPU use, memory, GPU
+power, and the decode and prefill peaks, over 6 h, 24 h, 48 h, 7 days or 30 days. GPU figures come from `nvidia-smi` when it is installed.
+
+### 14.5 Health and phone alerts
+
+**NOW** lists what needs you: memory under `health.mem_low_gib`, a GPU at `health.gpu_hot_c` or above, a GPU Xid error or an out-of-memory
+kill in the kernel log, the playing cassette's engine gone with no EJECT for a minute, the local disk under `health.disk_low_gib`.
+
+Phone alerts use [ntfy](https://ntfy.sh) (a separate, open-source push service and app):
+
+1. **create a topic**: the deck makes a random topic (144 bits) and shows it once, with the server; **show topic** shows it again.
+2. In the ntfy app on your phone, subscribe to that topic on that server.
+3. Tick **send alerts**, then **send a test**.
+
+A condition must last the hold time (60 s by default) before it is sent, you get a note when it clears, and each kind is sent at most once
+every 30 minutes; one-off events (an Xid, an OOM kill) are sent at once. A message names the alert only, for example *memory low (under 8 GiB
+free)*: no host name, address, port, path, model or token. Anyone who knows the topic can read it, so keep it private, or reserve the topic on
+your ntfy server and set its access token. The deck sends over https only, to a public address it resolves when it sends (loopback, private,
+link-local and reserved addresses are refused), never follows a redirect, and logs only whether a message was delivered. The settings are in
+`state_dir/notify.json` (mode 600).

@@ -9,7 +9,7 @@ Keep every AI model you own on a NAS. Play any of them on your GPU box with one 
 <p align="center">
   <a href="https://github.com/sunnychase/nas-model-cassette-changer/actions/workflows/tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/sunnychase/nas-model-cassette-changer/tests.yml?branch=main&style=flat-square&label=tests" alt="Tests"></a>
   <a href="https://github.com/sunnychase/nas-model-cassette-changer/releases"><img src="https://img.shields.io/github/v/release/sunnychase/nas-model-cassette-changer?style=flat-square" alt="Latest release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License: MIT"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square&logo=opensourceinitiative&logoColor=white" alt="License: MIT"></a>
   <a href="#prerequisites"><img src="https://img.shields.io/badge/python-3.9%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.9+"></a>
   <a href="#prerequisites"><img src="https://img.shields.io/badge/dependencies-stdlib%20only-success?style=flat-square" alt="Dependencies: Python standard library only"></a>
   <a href="#engines"><img src="https://img.shields.io/badge/engines-Ollama%20%C2%B7%20vLLM%20%C2%B7%20SGLang-555555?style=flat-square" alt="Engines: Ollama, vLLM, SGLang"></a>
@@ -23,17 +23,19 @@ Keep every AI model you own on a NAS. Play any of them on your GPU box with one 
   <a href="#quick-start">Quick start</a> ·
   <a href="#how-it-works">How it works</a> ·
   <a href="#engines">Engines</a> ·
-  <a href="#whats-new-in-14-lion-ai-models">What's new</a> ·
+  <a href="#whats-new-in-15-long-context-benchmarks-a-quality-test-history-and-phone-alerts">What's new</a> ·
+  <a href="#benchmarks">Benchmarks</a> ·
   <a href="#screenshots">Screenshots</a> ·
   <a href="#faq">FAQ</a> ·
   <a href="#documentation">Documentation</a> ·
   <a href="#contributing">Contributing</a>
 </p>
 
-<p align="center"><a href="docs/media/nas-model-cassette-changer.mp4"><img src="docs/media/preview.webp" width="100%" alt="Lion AI Models: the cassette player on a working deck with a 220-model NAS library, Qwen3.8-Flash-Next playing in a TensorFold lane, the reels turning"></a><br>
-<sub>▶ <a href="docs/media/nas-model-cassette-changer.mp4"><b>Watch the 12-second clip</b></a> (MP4, 1920 px wide, silent): the cassette player on a working
-deck with a 220-model NAS library, Qwen3.8-Flash-Next playing in a TensorFold lane. Every frame is the deck page itself; the reels turn while a
-cassette plays (faster while it loads), and the green frame means playing.</sub></p>
+<p align="center"><a href="docs/media/lion-ai-models-reel.mp4"><img src="docs/media/lion-ai-models-reel.gif" width="100%" alt="Lion AI Models in demo mode: the sign-in card, the shelf, the engine selector, the guard dialog, a TensorFold recipe loading and playing, a long-context decode at 1, 2, 4 and 8 streams, the prefill sweep, the quality test, two days and thirty days of history, phone alerts, and the phone layout"></a><br>
+<sub>▶ <a href="docs/media/lion-ai-models-reel.mp4"><b>Watch the one-minute reel</b></a> (MP4, 1920 × 1080, silent): every function of 1.5 in demo mode:
+sign in, the shelf and the engine selector, the guard, a TensorFold recipe loading and playing, the long-context decode at 1, 2, 4 and 8
+streams, the prefill sweep, the quality test, history, phone alerts and the phone layout. Every frame is the deck page itself, in demo
+mode: the figures in it are simulated (the measured ones are in [Benchmarks](#benchmarks)).</sub></p>
 
 Local models are huge. A GPU box has a fast but small disk; a NAS has lots of cheap space but is far too slow to serve from. The NAS Model Cassette Changer treats every model like a cassette on a shelf:
 
@@ -41,6 +43,10 @@ Local models are huge. A GPU box has a fast but small disk; a NAS has lots of ch
 - **The deck (GPU box)**: a web page lists the whole shelf. Press **INSERT** and it copies the model to local NVMe and starts it: in **Ollama** (GGUF), in a **vLLM** or **SGLang** container (safetensors, your choice per model), or with the model's own **recipe lane** (for example a **TensorFold** serving recipe).
 - **The guard**: an insert never stops anything you didn't name. If loading a model would evict something, the deck lists exactly what would stop and waits until you tick every name. Models you mark as *protected* keep their memory reserved even when they are unloaded.
 - **The ejector**: stops the cassette and, if you ask, deletes the local copy. The NAS copy is never touched.
+- **The bench** (new in 1.5): measures what is playing the way you use it: every stream first filled to a long context, then 1, 2, 4 and 8
+  streams decoding together; a prefill sweep from 1k to 256k tokens; and a fixed 60-question quality test, graded by rule.
+- **The watch** (new in 1.5): two days of minute-by-minute history and thirty days at a glance (temperature, GPU, memory, power, tokens per
+  second), and an alert on your phone, through the free ntfy app, when the box needs you.
 
 ## Quick start
 
@@ -129,7 +135,8 @@ The full walkthrough is in the **[User Guide](docs/USER_GUIDE.md)**. It covers f
         │
         ├── sync, every 10 min ... ssh (BatchMode): copies library.json and the .gguf list; never wakes a sleeping NAS
         ├── INSERT ............... rsync --partial from the NAS to local NVMe (~/models/deck), then starts the engine
-        └── engines .............. Ollama (GGUF) · a vLLM or SGLang container (safetensors) · recipe lanes (e.g. TensorFold)
+        ├── engines .............. Ollama (GGUF) · a vLLM or SGLang container (safetensors) · recipe lanes (e.g. TensorFold)
+        └── bench + watch ........ deck/mcc_bench.py: long-context runs, the quality test, history, health, ntfy alerts (v1.5)
 
  the NAS ── nas/mcc_index.py, every 10 min: catalogues the model folders, builds the library/ symlinks, tiers and kits,
             and writes library.json; the deck only ever reads from it
@@ -142,7 +149,8 @@ plan is checked again after the copy, and if a GGUF load pushes out a protected 
 One GPU engine plays at a time. Everything machine-specific (the NAS's ssh alias and library path, protected models, ports,
 the fit constants) lives in `~/.config/mcc/deck.json` on the GPU box and `/etc/mcc/nas.json` on the NAS.
 
-It is two plain Python files with **no dependencies** beyond the standard library, plus `ssh`, `rsync`, Ollama and/or Docker on the GPU box.
+It is three plain Python files and one page with **no dependencies** beyond the standard library, plus `ssh`, `rsync`, Ollama and/or Docker on
+the GPU box.
 
 ### How it fits together
 
@@ -190,6 +198,23 @@ Every INSERT is a full copy of the model, so the link sets how long you wait:
 
 **A 10 GbE link (NICs on both boxes and a 10 GbE switch or a direct cable) is strongly recommended.** It only pays off if the NAS disks can keep up: one hard drive tops out around 150–250 MB/s. Use several drives, an SSD/NVMe pool or a read cache on the NAS. Ejecting is instant either way (it stops the model and, if you ask, deletes the local copy), and with a fast link re-inserting a model you deleted takes about a minute.
 
+## What's new in 1.5: long-context benchmarks, a quality test, history and phone alerts
+
+- **Long context · streams:** each stream is first filled to a start context (16k up to 256k, or your own number), then 1, 2, 4 and 8
+  streams decode together. You see the speed a long chat really gets, per stream and in total, the time to the first token, and whether the
+  engine reused the context or read it again ([§14.1](docs/USER_GUIDE.md#141-long-context--streams)).
+- **Prefill sweep:** time to the first token from 1k to 256k tokens, a fresh prompt every time.
+- **Quality test:** 60 fixed questions in six kinds at temperature 0, graded by rule, the last 30 runs kept, and an exact test that says
+  whether a change between two runs is real or could be chance.
+- **Every run gives way:** it plans its memory before it starts, refuses while someone is using the engine and stops when someone starts,
+  stops if memory runs low, and can be cancelled at any time. It never loads a model, and Ollama is measured at its own context so it never
+  reloads.
+- **History:** temperature, GPU and CPU use, memory, power, decode and prefill, minute by minute for 48 hours and every 15 minutes for 30 days.
+- **Health and phone alerts:** memory low, a hot GPU, a GPU error or an out-of-memory kill in the kernel log, an engine that stopped by itself,
+  a nearly full disk; sent to your phone through ntfy once you create a topic. Off by default.
+- **A sign-in card** with the lion instead of a browser prompt; the token is checked before it is kept. The lion is in the header too.
+- `deck/mcc_bench.py` (standard library only), 31 new tests against stub engines (82 in all), demo mode covers all of it.
+
 ## What's new in 1.4: Lion AI Models
 
 - **A new, professional interface:** a sidebar with sections (Now playing · Engines · GPU nodes · Models · Local copies · Deck log) that
@@ -211,7 +236,9 @@ Every INSERT is a full copy of the model, so the link sets how long you wait:
   its engine image can actually load (`mcc_deck.py archs vllm`). A model the image can't run is refused up front instead of after a long copy.
 - **NAS dot** in the header: green = awake at the last sync, red = asleep (the last index is shown).
 
-### Benchmarks beside the tape
+### Benchmarks
+
+#### Beside the tape
 
 <img src="docs/images/screenshot-benchmarks.png" width="440" align="right" alt="benchmark panel">
 
@@ -224,8 +251,54 @@ To the right of the cassette, the **LLM server** card measures whatever is loade
   They work on Ollama too, using Ollama's own timings. Every prompt starts with a random nonce, so prefix caches can't flatter the number.
 - **Daily peak tok/s** for the last 14 days, decode or prefill.
 
-Results are kept in `bench.jsonl` / `peaks.json` in the state dir. Quality and tool-use evals are not part of this build.
+Results are kept in `bench.jsonl` / `peaks.json` in the state dir.
 <br clear="right">
+
+#### Long context, prefill sweep and the quality test (1.5)
+
+<img src="docs/images/screenshot-long-context.png" width="380" align="right" alt="the long-context section of the LLM server card in demo mode (simulated figures): start context, streams, the decode table, the prefill sweep and the quality runs">
+
+Below the quick buttons, **LONG CONTEXT · STREAMS**:
+
+- **⏱ Decode at 32k** (or any start context): every stream is warmed with its own long context, then 1, 2, 4 and 8 streams decode at once.
+  The table gives tokens per second **each** and in **total**, a **steady** rate while every stream was decoding, the **first-token** time,
+  and **✓ reused** or **recomputed** for the context, from the engine's own cached-token count.
+- **⇥ Prefill sweep:** 1k, 4k, 16k, 32k, 64k, 128k and 256k tokens, a fresh prompt each time: time to the first token and prefill tokens
+  per second.
+- **✓ Quality:** 60 fixed questions, graded by rule; **compare the last two** runs with an exact McNemar test.
+
+*The screenshot is demo mode: its figures are simulated. The table below is measured.*
+
+Every run first shows its plan (time, memory, the limits read from the engine) and waits for your OK. It never loads a model, gives way to
+any other client, stops if memory runs low, and has a **Cancel** button. The numbers are the engine's own token counts and the client's
+clock, never a guess; anything unusual (a context that was read again, an early end, another client, an engine error) is flagged on the row.
+
+Measured on one DGX Spark, Qwen3.8-Flash-Next INT4 in a TensorFold recipe lane, 512 tokens out:
+
+| start context | streams | each | total | first token | cold prefill |
+|---|---|---|---|---|---|
+| 16k | 1 | 40.3 tok/s | 40.3 tok/s | 0.3 s (context reused) | 9.2 s |
+| 16k | 2 | 31.8 tok/s | 60.0 tok/s | 0.5 s (reused) | |
+| 64k | 1 | 40.6 tok/s | 40.6 tok/s | 0.3 s (reused) | 26.3 s |
+| 64k | 2 | 28.9 tok/s | 55.8 tok/s | 0.5 s (reused) | |
+
+The memory each run needs is planned from the recipe's own figure with a margin set from these runs (1.06× the formula at 16k, 1.29× at
+64k). Everything is in [User Guide §14](docs/USER_GUIDE.md#14-benchmarks-history-and-phone-alerts-v15).
+<br clear="right">
+
+### History and phone alerts (1.5)
+
+![history](docs/images/screenshot-history.png)
+<sub>Demo mode: simulated history.</sub>
+
+**History** charts temperature, GPU and CPU use, memory, GPU power and the decode and prefill peaks over 6 hours to 30 days: 1-minute means
+for 48 hours and 15-minute means for 30 days, in two small files in the state dir.
+
+![phone alerts](docs/images/screenshot-alerts.png)
+
+**Health and phone alerts** lists what needs you now, and sends it to your phone through [ntfy](https://ntfy.sh): create a topic, subscribe to
+it in the ntfy app, tick *send alerts*. An alert must last a minute first, you get a note when it clears, and a message names the alert only
+(no host, address, port, model or token). It is off until you set it up.
 
 ## Screenshots
 
@@ -242,6 +315,10 @@ Results are kept in `bench.jsonl` / `peaks.json` in the state dir. Quality and t
 | ![engines](docs/images/screenshot-engines.png) | ![tensorfold](docs/images/screenshot-tensorfold.png) |
 | **Selector on vLLM:** the architecture check refuses a model before the copy | **Loading:** amber frame, the reels turning fast |
 | ![selector on vLLM](docs/images/screenshot-selector.png) | ![loading](docs/images/screenshot-loading.png) |
+
+| **Sign in** (1.5): the lion, and the token checked before it is kept | **On a phone** (1.5): the player and the LLM server card (demo mode, simulated figures) |
+|---|---|
+| ![sign in](docs/images/screenshot-signin.png) | ![phone](docs/images/screenshot-phone.png) |
 
 <p align="center"><img src="docs/images/screenshot-mobile.png" width="300" alt="mobile view"><br><em>Works on a phone.</em></p>
 
@@ -263,6 +340,22 @@ exact list and does nothing until every name is confirmed. Protected models keep
 unloaded, and a GGUF insert never evicts them. A vLLM or SGLang cassette takes most of the GPU, so its dialog names
 everything it would stop, protected models included. The plan is checked again after the copy. The rules are in
 [User Guide §6](docs/USER_GUIDE.md#6-the-guard-rule-by-rule).
+</details>
+
+<details>
+<summary><b>Will a benchmark get in the way of a chat?</b></summary>
+
+No. A long-context run refuses to start while the engine is serving anyone else and stops as soon as another request arrives (unless you
+tick *run even while someone uses it*, and then the result is flagged). It never loads a model, it stops if memory runs low, and Cancel
+closes every request at once. Ollama is measured through its own API at the resident model's context, so it is never reloaded.
+</details>
+
+<details>
+<summary><b>What does a phone alert send, and to whom?</b></summary>
+
+Only the kind of alert, for example *memory low (under 8 GiB free)*, to the ntfy server and topic you set up (the public ntfy.sh or your
+own). No host name, address, port, model name or token. Anyone who knows the topic can read it, so keep it private or reserve it. Alerts are
+off until you create a topic, and the deck only ever sends over https to a public address.
 </details>
 
 <details>
@@ -332,11 +425,12 @@ internet. See [User Guide §9](docs/USER_GUIDE.md#9-remote-access) and [SECURITY
 ```
 nas/mcc_index.py          NAS indexer: library view, tiers, kits, library.json, ABOUT-MODEL.md
 deck/mcc_deck.py          GPU-box deck: sync, guard, insert/eject, web server, demo mode
+deck/mcc_bench.py         v1.5: long-context benchmarks, the quality test, history, health, ntfy alerts
 deck/deck.html            the web page (no build step, no external assets)
 examples/                 nas.example.json, deck.example.json, recipes.example.json (TensorFold)
 nas/systemd, deck/systemd timers and services
 scripts/                  install-nas.sh, install-deck.sh, check.sh (py_compile + hygiene grep)
-tests/                    python -m unittest discover -s tests
+tests/                    python -m unittest discover -s tests (test_deck, test_bench, test_index)
 docs/                     USER_GUIDE.md, images, and the scripts that draw them
 ```
 
@@ -362,6 +456,7 @@ for coding agents. Report security problems privately, as described in [SECURITY
 
 Created by **[Sunny Chase](https://github.com/sunnychase)** in collaboration with **Claude** (Anthropic).
 Ollama, vLLM, SGLang and TensorFold are separate projects under their own licences; the deck only starts and stops them.
+ntfy is a separate project and service; the deck only sends it the messages you turn on.
 
 ## License
 

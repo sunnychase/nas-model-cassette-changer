@@ -51,5 +51,14 @@
   "engine_archs": {
     "vllm": "~/.config/mcc/vllm_archs.json",
     "sglang": "~/.config/mcc/sglang_archs.json"
+  },
+  "bench": {
+    "max_streams": 8
+  },
+  "health": {
+    "gpu_hot_c": 85,
+    "mem_low_gib": 8,
+    "disk_low_gib": 50,
+    "kernel_log": true
   }
 }

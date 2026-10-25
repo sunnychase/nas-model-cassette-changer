@@ -1,0 +1,297 @@
+{
+ "name": "Lion AI Models",
+ "repo": "nas-model-cassette-changer",
+ "tagline": "Every model on your NAS, one click from your GPU box",
+ "info": "Ollama \u00b7 vLLM \u00b7 SGLang \u00b7 recipe lanes   \u00b7   long-context benchmarks \u00b7 quality test \u00b7 history \u00b7 phone alerts",
+ "wall": [
+  "Version 1.5",
+  "Long-context benchmarks, a quality test, history and phone alerts",
+  "Standard-library Python \u00b7 one page \u00b7 a demo mode that touches nothing"
+ ],
+ "foot": "Open source \u00b7 MIT licence \u00b7 shown in demo mode: the figures are simulated",
+ "grid": [
+  5,
+  3,
+  330,
+  186
+ ],
+ "full": [
+  0.5,
+  0.5,
+  1.3
+ ],
+ "segs": [
+  {
+   "img": "01-signin",
+   "title": "A sign-in card, not a browser prompt",
+   "sub": "The deck checks the token before it keeps it",
+   "tag": "NEW IN 1.5",
+   "keys": [
+    [
+     "FULL",
+     0.7
+    ],
+    [
+     [
+      0.5,
+      0.42,
+      0.5
+     ],
+     1.6
+    ]
+   ]
+  },
+  {
+   "img": "02-library",
+   "title": "Every model on the NAS, on one shelf",
+   "sub": "Grouped by what it does and whether it fits on this box right now",
+   "tag": "DEMO MODE",
+   "keys": [
+    [
+     "FULL",
+     0.9
+    ],
+    [
+     [
+      0.56,
+      0.32,
+      0.62
+     ],
+     1.7
+    ]
+   ]
+  },
+  {
+   "img": "03-engine",
+   "title": "Pick an engine",
+   "sub": "The shelf shows only what Ollama, vLLM, SGLang or a recipe lane plays",
+   "tag": "DEMO MODE",
+   "keys": [
+    [
+     "FULL",
+     0.7
+    ],
+    [
+     [
+      0.36,
+      0.42,
+      0.62
+     ],
+     1.6
+    ]
+   ]
+  },
+  {
+   "img": "04-guard",
+   "title": "The guard: nothing stops until you name it",
+   "sub": "Every model an insert would stop is listed and must be ticked",
+   "tag": "DEMO MODE",
+   "keys": [
+    [
+     "FULL",
+     0.7
+    ],
+    [
+     [
+      0.5,
+      0.5,
+      0.42
+     ],
+     1.8
+    ]
+   ]
+  },
+  {
+   "img": "05-loading",
+   "title": "Insert: copied from the NAS, then started",
+   "sub": "Amber frame, the reels turning fast while it loads",
+   "tag": "DEMO MODE",
+   "keys": [
+    [
+     "FULL",
+     0.6
+    ],
+    [
+     [
+      0.3,
+      0.22,
+      0.5
+     ],
+     1.5
+    ]
+   ]
+  },
+  {
+   "img": "06-playing",
+   "title": "Playing in a TensorFold recipe lane",
+   "sub": "The LLM server card measures whatever is loaded",
+   "tag": "DEMO \u00b7 SIMULATED FIGURES",
+   "keys": [
+    [
+     "FULL",
+     0.6
+    ],
+    [
+     [
+      0.62,
+      0.24,
+      0.62
+     ],
+     1.6
+    ]
+   ]
+  },
+  {
+   "img": "07-decode-running",
+   "title": "Long context: every stream filled to 32k first",
+   "sub": "Then 1, 2, 4 and 8 streams decode together; Cancel at any time",
+   "tag": "DEMO \u00b7 SIMULATED FIGURES",
+   "keys": [
+    [
+     "FULL",
+     0.6
+    ],
+    [
+     [
+      0.8,
+      0.2,
+      0.36
+     ],
+     1.7
+    ]
+   ]
+  },
+  {
+   "img": "08-decode",
+   "title": "The speed a long chat really gets",
+   "sub": "Per stream, total, steady and first-token time; the warm context reused",
+   "tag": "DEMO \u00b7 SIMULATED FIGURES",
+   "keys": [
+    [
+     "FULL",
+     0.5
+    ],
+    [
+     [
+      0.82,
+      0.36,
+      0.3
+     ],
+     2.0
+    ]
+   ]
+  },
+  {
+   "img": "09-sweep",
+   "title": "Prefill sweep, 1k to 128k",
+   "sub": "Time to the first token at each size, a fresh prompt every time",
+   "tag": "DEMO \u00b7 SIMULATED FIGURES",
+   "keys": [
+    [
+     "FULL",
+     0.5
+    ],
+    [
+     [
+      0.82,
+      0.16,
+      0.3
+     ],
+     1.9
+    ]
+   ]
+  },
+  {
+   "img": "10-quality",
+   "title": "A quality test, graded by rule",
+   "sub": "60 fixed questions at temperature 0, and an exact test between two runs",
+   "tag": "DEMO \u00b7 SIMULATED FIGURES",
+   "keys": [
+    [
+     "FULL",
+     0.5
+    ],
+    [
+     [
+      0.82,
+      0.6,
+      0.34
+     ],
+     2.0
+    ]
+   ]
+  },
+  {
+   "img": "11-history",
+   "title": "History: two days, minute by minute",
+   "sub": "Temperature, GPU use, memory, power and tokens per second",
+   "tag": "DEMO \u00b7 SIMULATED FIGURES",
+   "keys": [
+    [
+     "FULL",
+     0.6
+    ],
+    [
+     [
+      0.54,
+      0.25,
+      0.86
+     ],
+     1.6
+    ]
+   ]
+  },
+  {
+   "img": "12-history-30d",
+   "title": "And thirty days at a glance",
+   "sub": "15-minute means, with the GPU peak",
+   "tag": "DEMO \u00b7 SIMULATED FIGURES",
+   "keys": [
+    [
+     "FULL",
+     0.5
+    ],
+    [
+     [
+      0.54,
+      0.25,
+      0.86
+     ],
+     1.5
+    ]
+   ]
+  },
+  {
+   "img": "13-alerts",
+   "title": "Alerts on your phone",
+   "sub": "ntfy, off until you make a topic; the message names the alert, nothing else",
+   "tag": "NEW IN 1.5",
+   "keys": [
+    [
+     "FULL",
+     0.6
+    ],
+    [
+     [
+      0.5,
+      0.48,
+      0.62
+     ],
+     1.8
+    ]
+   ]
+  },
+  {
+   "img": "14-phone",
+   "title": "Works on a phone",
+   "sub": "The same deck, the same benchmarks, a stacked layout",
+   "tag": "DEMO \u00b7 SIMULATED FIGURES",
+   "keys": [
+    [
+     "FULL",
+     2.2
+    ]
+   ]
+  }
+ ]
+}

@@ -17,6 +17,9 @@ like a cassette on a shelf:
            out anyway the new cassette is removed again.
   EJECT    stops what the deck is playing; optionally deletes the local copy (separate confirm). The NAS copy is never touched.
 
+  BENCH    (v1.5, deck/mcc_bench.py) long-context decode at 1/2/4/8 streams, a prefill sweep and a quality test on what is playing;
+           1-minute history for 48 h and 15-minute history for 30 days; health alerts to a phone through ntfy (off until you set it up).
+
 Stdlib only (Python 3.9+). Talks to: ssh + rsync (to the NAS), the Ollama HTTP API, docker (vLLM / SGLang), recipe scripts, /proc/meminfo.
 
 Usage:
@@ -30,7 +33,10 @@ import argparse, collections, glob, hmac, json, os, re, secrets, shlex, shutil, 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-VERSION = "1.4.0"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mcc_bench   # noqa: E402  (v1.5: long-context benchmarks, the quality test, history, phone alerts)
+
+VERSION = "1.5.0"
 HOME = os.path.expanduser("~")
 
 DEFAULTS = {
@@ -74,6 +80,9 @@ DEFAULTS = {
     # v1.3 ARCHITECTURE CHECK: per engine, a JSON file listing the architectures its image can load ({"image", "read", "architectures": [...]}),
     # written by `mcc_deck.py archs vllm` / `archs sglang`. A missing file = no check for that engine (the 1.2 behaviour).
     "engine_archs": {"vllm": "~/.config/mcc/vllm_archs.json", "sglang": "~/.config/mcc/sglang_archs.json"},
+    # v1.5 BENCH / HEALTH: the long-context benchmark's stream cap for vLLM / SGLang, and the alert thresholds (phone alerts are set up on the page)
+    "bench": {"max_streams": 8},
+    "health": {"gpu_hot_c": 85, "mem_low_gib": 8, "disk_low_gib": 50, "kernel_log": True},
 }
 ENGINE_LABEL = {"vllm": "vLLM", "sglang": "SGLang"}
 ARCH_PROBE = {   # prints one architecture per line from inside the engine's own image
@@ -610,6 +619,8 @@ class System:
 
     def ollama_rm(self, name): _sh(["ollama", "rm", name], 60)
 
+    def bench_io(self): return mcc_bench.RealIO(self.cfg.get("ollama_url") or "http://127.0.0.1:11434")
+
 
 # ── the deck ───────────────────────────────────────────────────────────────────────────────────────────────────────
 class Deck:
@@ -622,6 +633,7 @@ class Deck:
         self.BENCH, self.PEAKS = f"{s}/bench.jsonl", f"{s}/peaks.json"
         self.live = collections.deque(maxlen=360); self.prev = None; self.served = {}      # 30 min of 5 s samples, per target
         self.bjob = {"running": False, "kind": "", "msg": ""}
+        self.expires_left = expires_left; self.bench2 = mcc_bench.Bench(self, self.sys.bench_io())     # v1.5
 
     # sync ----------------------------------------------------------------------------------------------------------
     def sync(self):
@@ -663,6 +675,12 @@ class Deck:
 
     def recipes(self):
         return self.cfg["_recipes"] if "_recipes" in self.cfg else load_recipes(self.cfg["recipes_file"])
+
+    def recipe_for_target(self, t):
+        """the recipe lane a benchmark target is (by its port, else its label), or None"""
+        rs = list(self.recipes().values())
+        return next((r for r in rs if t.get("port") and int(r.get("port") or 0) == int(t["port"])), None) or \
+            next((r for r in rs if (r.get("label") or "recipe") == t.get("engine")), None)
 
     def units_for(self, m, units_idx, recipes=None):
         """GGUF: one unit per quant file. Safetensors: the whole folder once per enabled engine (vLLM / SGLang).
@@ -754,11 +772,12 @@ class Deck:
         except OSError: pass
         lf = last_fail(hist, tail); playing = _rjson(self.PLAYING, {})
         f = self.cfg["fit"]
-        return {"version": VERSION, "asof": time.strftime("%Y-%m-%dT%H:%M:%S"), "library_built": d.get("built") if isinstance(d, dict) else None,
+        return {"version": VERSION, "demo": isinstance(self.sys, DemoSystem), "asof": time.strftime("%Y-%m-%dT%H:%M:%S"), "library_built": d.get("built") if isinstance(d, dict) else None,
                 "nas": _rjson(self.NAS, {}), "syncing": self.syncing, "n_shelf": len(rows), "shelf": rows, "tiers": tiers, "max_nodes": mx,
                 "n_new": sum(1 for r in rows if r["new"]), "slots": slots, "online_nodes": sum(1 for s in slots if s.get("online")),
                 "protected": self.cfg["protected"], "residents": res, "job": dict(self.job), "playing": playing,
-                "engine_bar": engine_bar(rows, res, playing), "bench": self.bench_state(res), "last_fail": lf, "arch_check": sorted(e for e, a in (self.cfg.get("_archs") or {}).items() if a),
+                "engine_bar": engine_bar(rows, res, playing), "bench": self.bench_state(res), "last_fail": lf,
+                "health": getattr(self.bench2, "findings", []), "arch_check": sorted(e for e, a in (self.cfg.get("_archs") or {}).items() if a),
                 "local": self.local_cassettes(rows), "history": hist[-12:], "new_days": self.cfg["new_days"], "engines": self.cfg["engines"],
                 "functions": [{"key": k, "label": lab, "n": sum(1 for r in rows if r["function"] == k),
                                "fit": {c: sum(1 for r in rows if r["function"] == k and r["fit"]["class"] == c) for c in FIT_ORDER}}
@@ -813,8 +832,12 @@ class Deck:
     def sampler(self, every=5):
         def run():
             while True:
-                try: self.sample()
+                res, live = None, None
+                try:
+                    res = self.sys.residents(self.cfg["state_dir"], self.recipes())
+                    if self.sample(res) is not None and self.live: live = self.live[-1]
                 except Exception: pass
+                self.bench2.tick(live, res)                  # v1.5: history, health, phone alerts (never raises)
                 time.sleep(every)
         threading.Thread(target=run, daemon=True).start()
 
@@ -840,7 +863,7 @@ class Deck:
         return {"started": True, "kind": kind, "model": t["model"]}
 
     def bench_state(self, res=None):
-        t = self.target(res); out = {"target": t, "job": dict(self.bjob), "live": None, "last": {}, "daily": []}
+        t = self.target(res); out = {"target": t, "job": dict(self.bjob), "live": None, "last": {}, "daily": [], "v2": self.bench2.state(t)}
         pk = _rjson(self.PEAKS, {}); days = [time.strftime("%Y-%m-%d", time.localtime(time.time() - i * 86400)) for i in range(13, -1, -1)]
         out["daily"] = [{"day": d, "decode": (pk.get(d) or {}).get("decode"), "prefill": (pk.get(d) or {}).get("prefill")} for d in days]
         if not t: return out
@@ -1037,7 +1060,7 @@ class DemoSystem(System):
     def serve_recipe(self, r, mid, f, evict):
         self.oll = [o for o in self.oll if o["name"] not in evict]
         f.write(f"$ {r['start']}   ({r['label']}, MCC_MODEL_DIR=~/models/deck/{mid})\n  … loading weights, compiling kernels\n"); time.sleep(2.5)
-        self.engine = {"engine": r.get("engine") or "recipe", "name": r["label"], "recipe": r["key"], "gib": 104.0}
+        self.engine = {"engine": r.get("engine") or "recipe", "name": r["label"], "recipe": r["key"], "gib": 84.0}
         f.write(f"[{r['label']} answering on :{r['port']} after 152 s]\n")
         return 0, {"runtime": r.get("engine") or "recipe", "port": r["port"], "name": r.get("served") or mid.split("/")[1], "label": r["label"], "recipe": r["key"]}
 
@@ -1068,6 +1091,9 @@ class DemoSystem(System):
         time.sleep(2)
         return {"tok_s": 38.4, "tokens": 256, "secs": 6.7} if kind == "decode" else {"tok_s": 912.0, "tokens": 2011, "secs": 2.2}
 
+    def bench_io(self):
+        io = mcc_bench.DemoIO(); io.mem_avail = lambda: self.residents(None)["mem_avail_gib"]; return io
+
 
 DEMO_ARCH = {"Qwen": "Qwen3ForCausalLM", "OpenAI": "GptOssForCausalLM", "Google": "Gemma3ForConditionalGeneration", "Meta": "LlamaForCausalLM",
              "Mistral": "MistralForCausalLM", "DeepSeek": "DeepseekV3ForCausalLM", "Zhipu-GLM": "Glm4MoeForCausalLM", "Microsoft": "Phi3ForCausalLM",
@@ -1076,7 +1102,8 @@ DEMO_ENGINE_ARCHS = sorted(set(DEMO_ARCH.values()) - {"NovelHybridForCausalLM"} 
 
 DEMO_RECIPES = {"Qwen/Qwen3.8-Flash-Next/Vontra-MLX-4bit-MTP": {
     "label": "TensorFold", "engine": "tensorfold", "served": "Qwen3.8-Flash-Next", "quant": "MLX 4-bit + MTP", "nodes": 1, "need_gib": 112, "port": 8888,
-    "health_path": "/health", "metrics_path": "/metrics", "requires_ollama_stopped": True, "copy": False, "start": "~/recipes/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold/start.sh",
+    "health_path": "/health", "metrics_path": "/metrics", "requires_ollama_stopped": True, "copy": False,
+    "context": 262144, "parallel": 8, "kv_bytes_per_token": 17888, "memory_reserve_gib": 10, "start": "~/recipes/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold/start.sh",
     "stop": "~/recipes/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold/stop.sh",
     "repo": "https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold",
     "license": "recipe: MIT (see its LICENSE) · weights: see the model card"}}
@@ -1118,6 +1145,47 @@ def demo_seed(cfg):
         for kind, v, n in (("decode", 63.3, 256), ("prefill", 1836.0, 2014)):
             f.write(json.dumps({"ts": f"{now}T08:40:00", "key": "TensorFold:Qwen3.8-Flash-Next", "engine": "TensorFold", "model": "Qwen3.8-Flash-Next",
                                 "kind": kind, "tok_s": v, "tokens": n, "secs": 4.0}) + "\n")
+    demo_seed_v15(cfg, now)
+
+
+def demo_seed_v15(cfg, now):
+    """v1.5 demo data: two days of 1-minute history and a month of 15-minute history (a busy-then-idle pattern), and one earlier run of each
+    new benchmark and two quality runs for the TensorFold row. The long-context and sweep figures are the shape of a real run on a 128 GB
+    unified-memory node (Qwen3.8-Flash-Next INT4 on TensorFold); in demo mode they are only illustrations."""
+    s = cfg["state_dir"]; key = "TensorFold:Qwen3.8-Flash-Next"; t_now = int(time.time()); g = __import__("random").Random(7)
+    def load(t):
+        """0 … 1: idle nights, work sessions in the day (a session of 30–150 min every few hours), lighter weekends"""
+        lt = time.localtime(t); h = lt.tm_hour + lt.tm_min / 60; day = t // 86400
+        if h < 8 or h >= 23: return 0.0
+        gs = __import__("random").Random(int(day) * 31 + int(h // 3)); start = gs.uniform(0, 1.5); dur = gs.uniform(0.5, 2.5) * (0.5 if lt.tm_wday >= 5 else 1)
+        return 1.0 if start <= (h % 3) < start + dur else 0.0
+    def point(t, b, noise):
+        return {"t": t, "cpu": round(5 + 10 * b + noise(2), 1), "mem": round(23 + 61 * b + noise(0.6), 1), "avail": round(98 - 61 * b + noise(0.6), 1),
+                "util": round(2 + 70 * b + noise(6 * b + 0.5), 1), "power": round(21 + 62 * b + noise(5 * b + 0.5), 1),
+                "temp": round(41 + 18 * b + noise(1.2), 1), **({"tok": round(44 + noise(6), 1), "ptok": round(2150 + noise(180))} if b > 0.5 else {})}
+    n1 = lambda a: g.uniform(-a, a)
+    with open(f"{s}/metrics_1m.jsonl", "w") as f:
+        for i in range(48 * 60, 0, -1):
+            t = (t_now // 60 - i) * 60; f.write(json.dumps(point(t, load(t), n1)) + "\n")
+    with open(f"{s}/metrics_15m.jsonl", "w") as f:
+        for i in range(30 * 96, 0, -1):
+            t = (t_now // 900 - i) * 900; b = sum(load(t + k * 60) for k in range(15)) / 15; r = point(t, b, lambda a: 0.0)
+            r["tmax"] = round(r["temp"] + (6 if b else 1), 1); f.write(json.dumps(r) + "\n")
+    lv = [{"streams": 1, "per_stream": 40.3, "aggregate": 40.3, "steady": 40.4, "ttft": 0.3, "recomputed": 0, "short": 0, "check": "engine count", "detail": []},
+          {"streams": 2, "per_stream": 31.8, "aggregate": 60.0, "steady": 63.5, "ttft": 0.5, "recomputed": 0, "short": 0, "check": "engine count", "detail": []}]
+    rows = [{"ts": f"{now}T08:52:00", "key": key, "engine": "TensorFold", "model": "Qwen3.8-Flash-Next", "kind": "decode2", "status": "done",
+             "params": {"ctx": 16384, "levels": [1, 2], "out": 512}, "levels": lv, "pinned": True, "contaminated": False, "anyway": False, "others_visible": True,
+             "tok_s": 60.0, "tokens": 1536, "secs": 49.8},
+            {"ts": f"{now}T09:05:00", "key": key, "engine": "TensorFold", "model": "Qwen3.8-Flash-Next", "kind": "sweep", "status": "done", "params": {"sizes": [1024, 4096, 16384, 65536]},
+             "points": [{"size": 1024, "tokens": 1061, "ttft": 0.52, "tok_s": 2040.4, "timing": "client TTFT"}, {"size": 4096, "tokens": 4130, "ttft": 1.88, "tok_s": 2196.8, "timing": "client TTFT"},
+                        {"size": 16384, "tokens": 16327, "ttft": 9.17, "tok_s": 1780.5, "timing": "client TTFT"}, {"size": 65536, "tokens": 65366, "ttft": 26.3, "tok_s": 2485.4, "timing": "client TTFT"}],
+             "contaminated": False, "anyway": False, "others_visible": True, "tok_s": 2485.4, "tokens": 86884, "secs": 41.0}]
+    with open(f"{s}/bench.jsonl", "a") as f: f.writelines(json.dumps(r) + "\n" for r in rows)
+    cats = {"arithmetic": [9, 10], "state": [9, 10], "instructions": [10, 10], "logic": [10, 10], "units": [10, 10], "recall": [10, 10]}
+    with open(f"{s}/quality.jsonl", "w") as f:
+        for i, it in enumerate(("1" * 26 + "0" + "1" * 13 + "0" + "1" * 19, "1" * 27 + "0" + "1" * 32)):
+            f.write(json.dumps({"ts": f"{now}T0{7 + i}:30:00", "key": key, "model": "Qwen3.8-Flash-Next", "suite": "q1", "seed": 1025, "thinking": False, "n": 60,
+                                "right": it.count("1"), "score": round(100 * it.count("1") / 60, 1), "cats": cats, "items": it, "errors": 0, "status": "done"}) + "\n")
 
 
 # ── HTTP ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -1161,6 +1229,8 @@ def make_handler(deck, token, page):
             if not self._authed(): return self._send(403, {"error": "token required"})
             if u.path == "/api/deck": return self._send(200, deck.state(force="refresh" in parse_qs(u.query)))
             if u.path == "/api/deck/summary": return self._send(200, deck.summary())
+            if u.path == "/api/history": return self._send(200, deck.bench2.hist.read((parse_qs(u.query).get("range") or ["24h"])[0]))
+            if u.path == "/api/notify": return self._send(200, deck.bench2.notify_view())
             if u.path == "/api/deck/log":
                 try:
                     with open(deck.PULL_LOG, errors="replace") as f: txt = f.read()[-20000:]
@@ -1175,9 +1245,15 @@ def make_handler(deck, token, page):
             u = urlparse(self.path).path
             if u == "/api/deck/insert": r = deck.insert(str(b.get("id") or ""), b.get("unit"), b.get("confirm_evict"))
             elif u == "/api/deck/eject": r = deck.eject(b.get("id") or None, bool(b.get("remove_local")))
-            elif u == "/api/deck/bench": r = deck.bench(str(b.get("kind") or ""))
+            elif u == "/api/deck/bench":
+                k = str(b.get("kind") or "")
+                if k == "cancel": r = deck.bench2.cancel()
+                elif k == "compare": r = deck.bench2.compare(((deck.target() or {}).get("key")), b.get("a"), b.get("b"))
+                elif k in mcc_bench.KINDS: r = deck.bench2.plan(k, b) if b.get("plan") is True else deck.bench2.start(k, b)
+                else: r = deck.bench(k)
+            elif u == "/api/notify": r = deck.bench2.notify_post(b)
             else: return self._send(404, {"error": "not found"})
-            self._send(r.pop("status", 200) if "error" in r else 200, r)
+            self._send(r.pop("status", 200) if "error" in r or "status" in r else 200, r)
     return H
 
 

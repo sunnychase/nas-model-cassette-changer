@@ -1,5 +1,5 @@
 {
-  "_doc": "Recipe lanes: a model (by its library id) that is played by its own start/stop scripts instead of Ollama / vLLM / SGLang. The deck still enforces the guard: one GPU engine at a time, need_gib checked, everything it would stop named, Ollama never stopped for you. start/stop run with MCC_MODEL_DIR, MCC_MODEL_ID, MCC_PORT and 'env' set; '{model_dir}' in env values becomes the local copy path. copy:false = the recipe keeps its own weights (INSERT only starts it).",
+  "_doc": "Recipe lanes: a model (by its library id) that is played by its own start/stop scripts instead of Ollama / vLLM / SGLang. The deck still enforces the guard: one GPU engine at a time, need_gib checked, everything it would stop named, Ollama never stopped for you. start/stop run with MCC_MODEL_DIR, MCC_MODEL_ID, MCC_PORT and 'env' set; '{model_dir}' in env values becomes the local copy path. copy:false = the recipe keeps its own weights (INSERT only starts it). v1.5 benchmarks read: context (tokens per stream) and parallel (streams at once), as the recipe starts the engine; kv_bytes_per_token (only for an engine whose KV cache grows per request, from the recipe's own figure) and memory_reserve_gib (what the engine keeps free) make the long-context run plan its memory; prompt_cache_gib if the engine's kept-prompt budget is not 16 GiB. Without context the benchmark assumes 32k tokens and one stream.",
 
   "Qwen/Qwen3.8-Flash-Next/Vontra-MLX-4bit-MTP": {
     "label": "TensorFold",
@@ -12,6 +12,8 @@
     "health_path": "/health",
     "requires_ollama_stopped": true,
     "copy": false,
+    "context": 262144,
+    "parallel": 4,
     "start": "cd ~/recipes/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold && ./start.sh",
     "stop": "cd ~/recipes/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold && ./stop.sh",
     "start_timeout_s": 1800,
@@ -27,6 +29,8 @@
     "nodes": 1,
     "need_gib": 104,
     "port": 8887,
+    "context": 1048576,
+    "parallel": 8,
     "requires_ollama_stopped": true,
     "copy": false,
     "start": "cd ~/recipes/Qwen3.8-27B-DGX-Spark-TensorFold && ./start.sh",

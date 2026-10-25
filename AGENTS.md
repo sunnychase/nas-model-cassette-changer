@@ -14,11 +14,12 @@ that never stops anything the user did not name. See [How it works](README.md#ho
 |---|---|
 | `nas/mcc_index.py` | the NAS indexer: library symlinks, tiers, kits, `library.json`, `manifest.json`, `ABOUT-MODEL.md`; standard library only |
 | `deck/mcc_deck.py` | the GPU-box deck: sync, the guard (`plan_insert`, `plan_recipe`), insert / eject, benchmarks, the web server and API, demo mode; standard library only |
+| `deck/mcc_bench.py` | v1.5: the long-context benchmark, the prefill sweep, the quality suite, metrics history, health findings and the ntfy sender (`RealIO`, `DemoIO`, `Bench`, `History`); standard library only |
 | `deck/deck.html` | the whole page: HTML, CSS and JavaScript in one file, no build step, no external assets |
 | `nas/systemd/`, `deck/systemd/` | the index timer on the NAS; the sync timer and the deck service on the GPU box |
 | `examples/` | `nas.example.json`, `deck.example.json`, `recipes.example.json` (TensorFold), with placeholders only |
 | `scripts/` | `install-nas.sh`, `install-deck.sh`, and `check.sh` (the repository checks) |
-| `tests/` | `test_deck.py` (fit, units, the guard, recipes, a demo round trip, the selector, benchmarks) and `test_index.py` |
+| `tests/` | `test_deck.py` (fit, units, the guard, recipes, a demo round trip, the selector, benchmarks), `test_bench.py` (v1.5, against stub engines on 127.0.0.1) and `test_index.py` |
 | `docs/` | `USER_GUIDE.md`, the images, and `docs/src/` (the scripts that draw them; `make_charts.py` needs matplotlib, as doc tooling only) |
 
 ## Running it
@@ -54,6 +55,16 @@ These are the promises the README and the User Guide make. A change that weakens
    indexer never moves, renames or deletes a model file. **Deleting a local copy** stays inside `local_dir`.
 
 Any change to the guard needs a test in `tests/test_deck.py` that shows the new rule fails closed.
+
+## The benchmarks and the alerts: promises
+
+7. **A benchmark gives way.** It never loads a model, refuses to start while another client is using the engine, and stops (or,
+   with "anyway", flags its result) when one starts. It stops when memory falls under the floor, and CANCEL closes every socket.
+   Ollama is measured only through its native API at the resident's own context, with a keep_alive that is never shorter.
+8. **Results say what they are.** A rate comes from the engine's own counts or a client clock, never a substituted time; an
+   unreusable context, an early end, an unpinned length, an engine error or another client is flagged on the row.
+9. **Alerts stay quiet and safe.** Off until the user creates a topic. https only, a public address resolved at send time, no
+   redirects; a message names the alert kind only; the topic is never written to a log.
 
 ## Rules
 
