@@ -282,8 +282,8 @@ Measured on one DGX Spark, Qwen3.8-Flash-Next INT4 in a TensorFold recipe lane, 
 | 64k | 1 | 40.6 tok/s | 40.6 tok/s | 0.3 s (reused) | 26.3 s |
 | 64k | 2 | 28.9 tok/s | 55.8 tok/s | 0.5 s (reused) | |
 
-The memory each run needs is planned from the recipe's own figure with a margin set from these runs (1.06× the formula at 16k, 1.29× at
-64k). Everything is in [User Guide §14](docs/USER_GUIDE.md#14-benchmarks-history-and-phone-alerts-v15).
+The memory each run needs is planned from the recipe's own figure with a margin set from these runs and two more at 128k (1.06× the formula at 16k, 1.29× at
+64k, 0.99× and 0.93× at 128k with one and two streams). Everything is in [User Guide §14](docs/USER_GUIDE.md#14-benchmarks-history-and-phone-alerts-v15).
 <br clear="right">
 
 ### History and phone alerts (1.5)

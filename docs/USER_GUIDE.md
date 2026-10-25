@@ -429,9 +429,10 @@ Limits come from the engine, never a guess: vLLM's `max_model_len` and KV pool, 
 `parallel`, Ollama's resident context (and one stream; Ollama is measured through its native API at that context, so it never reloads the
 model). A context at the window is filled to the window less the replies. For a recipe whose KV cache grows per request
 (`kv_bytes_per_token`), the run is refused when streams × (context + replies) × bytes per token × a margin would not fit in MemAvailable less
-the headroom (8 GiB + `memory_reserve_gib` + 2 GiB). The margin is 1.5 (2.0 from 128k), set from measurements: on one DGX Spark with
-Qwen3.8-Flash-Next in a TensorFold lane, 16k × 2 streams took 0.67 GiB against 0.63 predicted, and 64k × 2 took 2.93 GiB against 2.27; the
-memory came back within a minute both times.
+the headroom (8 GiB + `memory_reserve_gib` + 2 GiB). The margin is 1.5 at every context, set from measurements: on one DGX Spark with
+Qwen3.8-Flash-Next in a TensorFold lane, 16k × 2 streams took 0.67 GiB against 0.63 predicted, 64k × 2 took 2.93 GiB against 2.27,
+128k × 1 took 2.18 against 2.21 and 128k × 2 took 4.15 against 4.45; the memory came back within a minute every time
+(measured up to 128k; 256k uses the same margin).
 
 While a run is in progress:
 

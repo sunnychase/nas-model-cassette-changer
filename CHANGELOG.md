@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+- **One measured memory margin:** the long-context plan now uses 1.5 at every context. The 2.0 for 128k and longer was a guess; two runs at
+  128k on a DGX Spark (Qwen3.8-Flash-Next in a TensorFold lane) took 0.99× (one stream) and 0.93× (two streams) of the formula, and the memory
+  came back within a minute (`deck/mcc_bench.py`, User Guide §14.1, README).
+
 ## 1.5.0 — long-context benchmarks, a quality test, history and phone alerts
 - **Long context · streams** (`deck/mcc_bench.py`, the LLM server card): every stream is warmed with its own context (16k … 256k or a custom
   size), then 1, 2, 4 and 8 streams decode together, each extending its own conversation so a prompt cache can resume it. Per level: tokens

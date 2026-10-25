@@ -42,8 +42,8 @@ OUTS = (256, 512, 1024)
 MARGIN = 512                     # the warm reply + the ask + the chat template, beside each level's reply
 UNKNOWN_CTX = 32768
 MEM_ABORT_GIB = 8.0
-KV_MARGIN = 1.5                  # measured on a TensorFold lane (16k × 2 streams: 1.06× the formula; 64k × 2: 1.29×), plus room
-KV_MARGIN_LONG = 2.0             # 128k and longer: not measured yet
+KV_MARGIN = 1.5                  # measured on a TensorFold lane: 16k × 2 streams 1.06× the formula, 64k × 2 1.29×, 128k × 1 0.99×,
+                                 # 128k × 2 0.93×; one margin for every context, with room above the largest
 PROMPT_CACHE_GIB = 16.0          # a typical kept-prompt budget, when a recipe does not state `prompt_cache_gib`
 SUITE, SUITE_SEED = "q1", 1025
 ASK0 = ("Write a long, detailed story about a lighthouse keeper who finds a message in a bottle. Never conclude it: keep adding "
@@ -58,7 +58,7 @@ class Stop(Exception):
 
 def _now(): return time.perf_counter()
 def _ts(): return time.strftime("%Y-%m-%dT%H:%M:%S")
-def kv_margin(ctx): return KV_MARGIN_LONG if ctx >= 131072 else KV_MARGIN
+def kv_margin(ctx): return KV_MARGIN
 
 
 def mem_avail_gib():
